@@ -20,8 +20,8 @@
     "dist": "npm run api-docs && npm run snapshot && tsc -p tsconfig.build.json && electron-builder --win nsis",
     "client": "tsc -p tsconfig.build.json && electron companion",
     "dist:client": "npm run snapshot && tsc -p tsconfig.build.json && electron-builder --config companion/builder.json --win nsis",
-    "release": "npm run api-docs && npm run snapshot && tsc -p tsconfig.build.json && electron-builder --win nsis --publish always",
-    "release:client": "npm run snapshot && tsc -p tsconfig.build.json && electron-builder --config companion/builder.json --win nsis --publish always"
+    "release": "npm run dist && node tools/publish-release.mjs host",
+    "release:client": "npm run dist:client && node tools/publish-release.mjs client"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
@@ -63,13 +63,6 @@
       "license": "LICENSE",
       "artifactName": "Tavern-Host-Setup-${version}.exe"
     },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "Volatile111",
-        "repo": "tavern-host",
-        "releaseType": "release"
-      }
-    ]
+    "publish": null
   }
 }
