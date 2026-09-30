@@ -1,0 +1,17 @@
+node_modules/
+# Build output: compiled JavaScript and installers.
+dist/
+release/
+# Zipped source of each built version (made by `npm run dist`).
+versions/
+# Runtime data: users, sessions, server configs and logs. Never commit.
+data/
+# Test-only UI redesigns (served by the dev panel at /launcher/ and /dashboard/). Kept local.
+ui-tests/
+# Secrets and logs, wherever they end up.
+*.log
+.env
+.env.*
+*.pfx
+*.p12
+*.pem

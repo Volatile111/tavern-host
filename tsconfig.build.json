@@ -1,0 +1,13 @@
+{
+  // Compiles src/ to plain JavaScript in dist/ for the installer (the packaged app runs dist/main.js with
+  // Electron's built-in Node). During development, `npm start` runs the .ts files directly instead.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "rewriteRelativeImportExtensions": true,
+    "sourceMap": false
+  },
+  "include": ["src"]
+}

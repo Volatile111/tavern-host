@@ -1,0 +1,75 @@
+{
+  "name": "tavern-host",
+  "productName": "Tavern Host",
+  "version": "0.4.0",
+  "description": "Tavern Host: a control panel for game servers (Valheim first, more games coming).",
+  "author": "Tavern Host",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.js",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "desktop": "electron desktop",
+    "check": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "snapshot": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/snapshot-source.ps1",
+    "api-docs": "node tools/make-api-docs.mjs",
+    "dist": "npm run api-docs && npm run snapshot && tsc -p tsconfig.build.json && electron-builder --win nsis",
+    "client": "tsc -p tsconfig.build.json && electron companion",
+    "dist:client": "npm run snapshot && tsc -p tsconfig.build.json && electron-builder --config companion/builder.json --win nsis",
+    "release": "npm run api-docs && npm run snapshot && tsc -p tsconfig.build.json && electron-builder --win nsis --publish always",
+    "release:client": "npm run snapshot && tsc -p tsconfig.build.json && electron-builder --config companion/builder.json --win nsis --publish always"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "electron": "^44.4.4",
+    "electron-builder": "^26.15.3",
+    "typescript": "^7.0.2"
+  },
+  "build": {
+    "appId": "com.gameserverpanel.app",
+    "productName": "Tavern Host",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "assets/**",
+      "public/**",
+      "scripts/**",
+      "desktop/**",
+      "package.json"
+    ],
+    "asar": false,
+    "win": {
+      "target": "nsis",
+      "icon": "desktop/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Tavern Host",
+      "runAfterFinish": true,
+      "installerIcon": "desktop/icon.ico",
+      "uninstallerIcon": "desktop/icon.ico",
+      "deleteAppDataOnUninstall": false,
+      "include": "desktop/installer.nsh",
+      "license": "LICENSE",
+      "artifactName": "Tavern-Host-Setup-${version}.exe"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Volatile111",
+        "repo": "tavern-host",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

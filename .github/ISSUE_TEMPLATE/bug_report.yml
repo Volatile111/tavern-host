@@ -1,0 +1,63 @@
+name: Report a problem
+description: Something in Tavern Host or Tavern Client Mod Manager doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Both apps are in beta, so reports like this really help.
+        Please **don't paste passwords, API keys, share links (thmods://…) or node codes (thnode://…)**: issues are public.
+  - type: dropdown
+    id: app
+    attributes:
+      label: Which app?
+      options:
+        - Tavern Host
+        - Tavern Client Mod Manager
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown at the top left of the app (e.g. 0.3.11).
+      placeholder: 0.3.11
+    validations:
+      required: true
+  - type: dropdown
+    id: game
+    attributes:
+      label: Game
+      options:
+        - Valheim
+        - Minecraft Bedrock
+        - Minecraft Java
+        - Not about a game
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we make it happen again?
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. See …
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error messages or console lines
+      description: Copy any error text or the server console lines from around the time it happened. Screenshots are welcome too (drag them in).
+      render: text
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'">
+<title>Tavern Client Mod Manager</title>
+<link rel="stylesheet" href="style.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<header>
+  <div class="top-left">
+    <span class="version" id="appVersion"></span>
+    <span class="credit">Created by CorruptedVariant · <a href="#" id="btnAbout">About &amp; help</a></span>
+  </div>
+  <div class="top-center">
+    <div class="brand"><img src="icon.png" alt=""> Tavern <span>Client Mod Manager</span></div>
+  </div>
+  <div class="top-right">
+    <div class="theme-corner">
+      <button type="button" class="theme-btn" id="btnTheme" title="Change colours" aria-label="Change colours" aria-expanded="false"></button>
+      <div class="theme-pop" id="themePop" hidden>
+        <div class="theme-label">Colour</div>
+        <input type="range" id="themeHue" min="0" max="359" step="1" class="hue-slider">
+        <div class="theme-swatches" id="themeSwatches"></div>
+        <button type="button" class="small ghost" id="themeReset">Reset to tavern amber</button>
+      </div>
+    </div>
+    <button id="btnSync" class="ghost">⟳ Sync now</button>
+    <button id="btnPlay" class="play">▶ Play Valheim</button>
+  </div>
+</header>
+
+<main>
+  <div class="update-banner" id="updateBanner" hidden>
+    <span id="updateText"></span>
+    <span class="spacer"></span>
+    <a href="#" id="updateNotes">What's new</a>
+    <button class="small primary" id="btnInstallAppUpdate">Update now</button>
+  </div>
+
+  <section class="card" id="gameCard">
+    <h3>Valheim</h3>
+    <div id="gameInfo"></div>
+  </section>
+
+  <section class="card">
+    <div class="head">
+      <h3>Profile</h3>
+      <button class="small" id="btnNewProfile">New profile…</button>
+    </div>
+    <p class="muted small">Flip between modded and plain Valheim. Vanilla switches the mod loader off without removing anything (it works when you start Valheim from Steam too). Each modded profile remembers which of your mods are on.</p>
+    <div class="profiles" id="profiles"></div>
+    <div class="row tight" id="profileActions"></div>
+  </section>
+
+  <section class="card">
+    <div class="head">
+      <h3>Servers</h3>
+      <label class="toggle"><input type="checkbox" id="autoSync"> Keep my mods matched automatically</label>
+    </div>
+    <p class="muted">Paste the link from the server owner (their Tavern Host → Mods tab → Share mods with players). Your mods will follow that server's: new ones are added, updated ones are updated and removed ones are removed. Mods you add yourself are left alone.</p>
+    <p class="muted small">Want to run your own server? <a href="https://github.com/Volatile111/tavern-host/releases/latest" target="_blank" rel="noopener">Get Tavern Host</a>: the free server panel these share links come from.</p>
+    <form id="linkForm" class="row">
+      <input id="linkInput" placeholder="thmods://192.168.1.50:8191/…" spellcheck="false" autocomplete="off">
+      <button class="primary" type="submit">Add server</button>
+    </form>
+    <div id="links"></div>
+  </section>
+
+  <section class="card">
+    <div class="head">
+      <h3>My mods <span class="count" id="modCount"></span></h3>
+      <div class="row tight">
+        <button class="small" id="btnBrowse">Browse Thunderstore</button>
+        <button class="small" id="btnHexium">Browse Hexium</button>
+        <button class="small" id="btnNexus">Browse Nexus Mods</button>
+        <button class="small ghost" id="btnCheckUpdates">Check for updates</button>
+        <label class="small button-like" for="fileInput">Add a .zip</label>
+        <input type="file" id="fileInput" accept=".zip" multiple hidden>
+        <button class="small ghost" id="btnPlugins">Open plugins folder</button>
+      </div>
+    </div>
+    <div class="drop" id="drop">Drop mod .zip files here to install them into Valheim</div>
+    <details class="nexus" id="nexusBox">
+      <summary>Nexus Mods <span class="muted small" id="nexusStatus"></span></summary>
+      <p class="muted small">In the Nexus window, "Manual download" works with any free account. To use the "Mod Manager Download" buttons (or paste links below), add your personal API key from nexusmods.com → Site preferences → API keys. It's checked with Nexus and stored encrypted on this PC.</p>
+      <form class="row" id="nexusKeyForm">
+        <input id="nexusKeyInput" type="password" placeholder="Nexus Mods API key" spellcheck="false" autocomplete="off">
+        <button class="small primary" type="submit">Save key</button>
+        <button class="small ghost" type="button" id="nexusKeyRemove" hidden>Remove key</button>
+      </form>
+      <p class="muted small">The box below also takes a Hexium mod page (valheim.hexium.gg/mods/Author/Mod): no key needed for Hexium.</p>
+      <form class="row" id="nexusLinkForm">
+        <input id="nexusLinkInput" placeholder="https://valheim.hexium.gg/mods/… · nxm://valheim/mods/… · https://www.nexusmods.com/valheim/mods/… (Premium)" spellcheck="false" autocomplete="off">
+        <button class="small" type="submit">Install</button>
+      </form>
+    </details>
+    <div id="mods"></div>
+  </section>
+
+  <section class="card">
+    <h3>Activity</h3>
+    <div class="log" id="log"></div>
+  </section>
+</main>
+<dialog id="reviewDialog" class="review">
+  <h2>Review mod changes</h2>
+  <p class="muted small">Every mod was downloaded and safety-checked (Windows Defender, Thunderstore status and a scan for malware-like behaviour). Nothing has been installed yet.</p>
+  <div id="reviewBody"></div>
+  <div class="row review-actions">
+    <span class="muted small" id="reviewNote"></span>
+    <span class="spacer"></span>
+    <button class="ghost" id="reviewCancel">Cancel</button>
+    <button class="primary" id="reviewApply">Install</button>
+  </div>
+</dialog>
+<dialog id="aboutDialog" class="about">
+  <h2><img src="icon.png" alt=""> Tavern Client Mod Manager <span class="muted" id="aboutVersion"></span></h2>
+  <p><span class="beta-badge">Beta</span> This app is actively being worked on and updates are frequent. If something goes wrong, please report it.</p>
+  <p class="muted small" id="aboutUpdate"></p>
+  <div class="row tight wrap">
+    <button class="small" id="btnCheckAppUpdate">Check for updates</button>
+    <button class="small ghost" id="btnUpdateApp">Update from a file…</button>
+    <a class="small button-like" id="aboutReport" href="https://github.com/Volatile111/tavern-host/issues/new/choose" target="_blank" rel="noopener">Report a problem</a>
+    <a class="small button-like" href="https://github.com/Volatile111/tavern-client-releases/releases" target="_blank" rel="noopener">What's new</a>
+    <a class="small button-like" href="https://github.com/Volatile111/tavern-host/releases/latest" target="_blank" rel="noopener">Get Tavern Host</a>
+  </div>
+  <p class="muted small">Created by CorruptedVariant. Free software under the <a href="https://github.com/Volatile111/tavern-host/blob/main/LICENSE" target="_blank" rel="noopener">GNU GPL v3</a>:
+    you may use, change and share it, and the <a href="https://github.com/Volatile111/tavern-host/tree/main/companion" target="_blank" rel="noopener">source code</a> is public. It comes with no warranty.
+    Not affiliated with Iron Gate, Coffee Stain, Thunderstore, Hexium or Nexus Mods.</p>
+  <div class="row review-actions"><span class="spacer"></span><button id="aboutClose">Close</button></div>
+</dialog>
+<div id="toast"></div>
+</body>
+</html>

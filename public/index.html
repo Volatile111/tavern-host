@@ -1,0 +1,1012 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tavern Host</title>
+<link rel="icon" href="/icon.png">
+<link rel="stylesheet" href="/styles.css">
+<script type="module" src="/app.js"></script>
+</head>
+<body>
+
+<!-- First run: create the owner account -->
+<section id="viewSetup" class="auth" hidden>
+  <form id="setupForm" class="auth-card">
+    <div class="auth-brand"><img src="/logo.svg" alt="" width="56" height="56"><span>Tavern Host</span></div>
+    <h1>Welcome, innkeeper</h1>
+    <p class="muted">Create the owner account for this Tavern Host. You'll use it to log in and manage your game servers.</p>
+    <label for="setupUser">Username</label>
+    <input id="setupUser" autocomplete="username" required>
+    <label for="setupPass">Password (8+ characters)</label>
+    <input id="setupPass" type="password" autocomplete="new-password" required minlength="8">
+    <label for="setupPass2">Confirm password</label>
+    <input id="setupPass2" type="password" autocomplete="new-password" required minlength="8">
+    <button class="primary" type="submit">Create account</button>
+    <p class="error" id="setupError"></p>
+  </form>
+</section>
+
+<section id="viewLogin" class="auth" hidden>
+  <form id="loginForm" class="auth-card">
+    <div class="auth-brand"><img src="/logo.svg" alt="" width="56" height="56"><span>Tavern Host</span></div>
+    <h1>Log in</h1>
+    <label for="loginUser">Username</label>
+    <input id="loginUser" autocomplete="username" required>
+    <label for="loginPass">Password</label>
+    <input id="loginPass" type="password" autocomplete="current-password" required>
+    <button class="primary" type="submit">Log in</button>
+    <p class="error" id="loginError"></p>
+  </form>
+</section>
+
+<section id="viewApp" class="app" hidden>
+  <header class="topbar">
+    <div class="top-left">
+      <span class="version" id="appVersion"></span>
+      <span class="credit">Created by CorruptedVariant · <a href="https://github.com/Volatile111/tavern-client-releases/releases/latest" target="_blank" rel="noopener" title="Tavern Client Mod Manager: keeps players' Valheim mods matched to your server">Get the player mod manager</a></span>
+    </div>
+    <div class="brand"><img src="/logo.svg" alt="" width="40" height="40" id="brandLogo"><span>Tavern Host</span></div>
+    <div class="top-right">
+      <div class="alerts-wrap">
+        <button class="ghost small alerts-btn" id="btnAlerts" hidden title="Health warnings">⚠ <span id="alertCount">0</span></button>
+        <div class="alerts-pop" id="alertsPop" hidden></div>
+      </div>
+      <button class="small update-pill" id="btnAppUpdate" hidden title="A new version of Tavern Host is out">⬆ Update available</button>
+      <span class="muted" id="whoami"></span>
+      <button class="ghost small" id="btnHelp" title="About Tavern Host, report a problem">Help</button>
+      <button class="ghost small" data-global="users.manage|panel.settings|audit.view" id="btnSettings">Settings</button>
+      <button class="ghost small" id="btnAccount">Account</button>
+      <button class="ghost small" id="btnLogout">Log out</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="side-head">
+        <span>Servers</span>
+        <div class="side-actions" data-global="servers.create">
+          <button class="small primary" id="btnNewServer" title="Create a brand-new server; Tavern Host downloads the software">+ New</button>
+          <button class="small" id="btnAddServer" title="Add a server you already have the files for">Import</button>
+        </div>
+      </div>
+      <nav id="serverList"></nav>
+      <div class="theme-corner">
+        <button type="button" class="theme-btn" id="btnTheme" title="Change colours" aria-label="Change colours" aria-expanded="false"></button>
+        <div class="theme-pop" id="themePop" hidden>
+          <label for="themeHue">Colour</label>
+          <input type="range" id="themeHue" min="0" max="359" step="1" class="hue-slider">
+          <div class="theme-swatches" id="themeSwatches"></div>
+          <button type="button" class="small ghost" id="themeReset">Reset to tavern amber</button>
+        </div>
+      </div>
+    </aside>
+
+    <main id="main">
+      <div id="emptyState" class="empty-state">
+        <h2>No server selected</h2>
+        <p class="muted">Add a server to get started, or pick one from the list.</p>
+      </div>
+
+      <div id="serverView" hidden>
+        <div class="server-head">
+          <span id="svIcon"></span>
+          <div>
+            <div class="server-title"><span id="svName"></span> <span class="tag" id="svGame"></span></div>
+            <div class="conn-strip" id="svConn"></div>
+            <div class="muted small-text" id="svMeta"></div>
+          </div>
+          <span class="pill" id="svStatus"></span>
+          <div class="spacer"></div>
+          <button class="ghost" data-perm="files.view" id="btnServerFiles" title="Browse and edit this server's files">📁 Files</button>
+          <div class="controls">
+            <button class="green" data-perm="control.start" id="btnStart">Start</button>
+            <button class="red" data-perm="control.stop" id="btnStop">Stop</button>
+            <button class="blue" data-perm="control.restart" id="btnRestart">Restart</button>
+            <button class="ghost" data-perm="control.restart" id="btnCountdown" title="Warn players in-game, then restart or stop" hidden>⏱ Countdown…</button>
+          </div>
+        </div>
+        <div class="countdown-banner" id="svCountdown" hidden>
+          <span id="svCountdownText"></span>
+          <button class="small" id="btnCancelCountdown">Cancel</button>
+        </div>
+        <p class="error-banner" id="svError" hidden></p>
+
+        <div class="tabs" id="tabs">
+          <button data-tab="overview" class="active">Overview</button>
+          <button data-tab="players">Players</button>
+          <button data-tab="console" data-perm="console.view">Console</button>
+          <button data-tab="chat" id="tabBtnChat" data-perm="console.view" hidden>Chat</button>
+          <button data-tab="settings">Settings</button>
+          <button data-tab="properties" id="tabBtnProperties" hidden>Properties</button>
+          <button data-tab="backups" id="tabBtnBackups" hidden>Backups</button>
+          <button data-tab="addons" id="tabBtnAddons" hidden>Addons</button>
+          <button data-tab="world" id="tabBtnWorld" hidden>World</button>
+          <button data-tab="worlds" id="tabBtnWorlds" hidden>Worlds</button>
+          <button data-tab="tasks">Tasks</button>
+          <button data-tab="access">Access</button>
+          <button data-tab="files" data-perm="files.view">Files</button>
+        </div>
+
+        <div class="tab" id="tab-overview">
+          <section class="card job-card" id="jobCard" hidden>
+            <div class="job-head">
+              <h3 id="jobTitle">Installing</h3>
+              <span class="muted" id="jobPercent"></span>
+            </div>
+            <div class="job-bar"><div id="jobBar"></div></div>
+            <p class="job-step" id="jobStep"></p>
+            <p class="error" id="jobError"></p>
+          </section>
+          <section class="card diag-card" id="ovDiagCard" hidden>
+            <div class="installed-head">
+              <h3>🩺 Crash check <span class="muted small-text" id="diagWhen"></span></h3>
+              <button class="small" id="btnDiagnose">Check again</button>
+              <button class="small ghost" id="btnDiagDismiss">Dismiss</button>
+            </div>
+            <div id="diagList"></div>
+          </section>
+          <div class="grid">
+            <section class="card">
+              <h3>Players <span class="count" id="ovPlayerCount"></span></h3>
+              <div id="ovPlayers" class="player-list"></div>
+            </section>
+            <section class="card">
+              <h3>Server</h3>
+              <dl class="facts" id="ovFacts"></dl>
+            </section>
+            <section class="card wide" id="ovResources">
+              <div class="stats-head">
+                <h3>Statistics <span class="muted small-text" id="resNote"></span></h3>
+                <div class="range-picker" id="resRange"></div>
+              </div>
+              <div class="res-grid">
+                <div class="res">
+                  <div class="res-head"><b>Uptime</b><span id="resUptime">–</span></div>
+                  <p class="muted small-text" id="resUptimeSub"></p>
+                  <div class="uptime-strip" id="resUptimeStrip"></div>
+                  <div class="axis"><span id="resAxisL"></span><span>now</span></div>
+                </div>
+                <div class="res">
+                  <div class="res-head"><b>Players</b><span id="resPlayers">–</span></div>
+                  <svg class="res-graph" id="resPlayersGraph" viewBox="0 0 1000 40" preserveAspectRatio="none"></svg>
+                  <p class="muted small-text" id="resPlayersSub"></p>
+                </div>
+                <div class="res">
+                  <div class="res-head"><b>CPU</b><span id="resCpu">–</span></div>
+                  <div class="res-bar"><div id="resCpuBar"></div></div>
+                  <svg class="res-graph" id="resCpuGraph" viewBox="0 0 1000 40" preserveAspectRatio="none"></svg>
+                  <p class="muted small-text" id="resCpuSub"></p>
+                </div>
+                <div class="res">
+                  <div class="res-head"><b>RAM</b><span id="resMem">–</span></div>
+                  <div class="res-bar"><div id="resMemBar"></div></div>
+                  <svg class="res-graph" id="resMemGraph" viewBox="0 0 1000 40" preserveAspectRatio="none"></svg>
+                  <p class="muted small-text" id="resMemSub"></p>
+                </div>
+              </div>
+            </section>
+            <section class="card wide" id="ovBossesCard" hidden>
+              <h3>Bosses defeated <span class="count" id="ovBossCount"></span></h3>
+              <div class="bosses" id="ovBosses"></div>
+            </section>
+          </div>
+        </div>
+
+        <div class="tab" id="tab-players" hidden>
+          <section class="card">
+            <div class="stats-head">
+              <h3>Players online <span class="muted small-text" id="plNow"></span></h3>
+              <div class="range-picker" id="plRange"></div>
+            </div>
+            <svg class="res-graph tall" id="plGraph" viewBox="0 0 1000 40" preserveAspectRatio="none"></svg>
+            <div class="axis"><span id="plAxisL"></span><span id="plPeak"></span><span>now</span></div>
+          </section>
+          <section class="card">
+            <h3>All players <span class="count" id="plCount"></span></h3>
+            <p class="muted small-text" id="plHelp"></p>
+            <div class="player-table" id="plList"></div>
+          </section>
+        </div>
+
+        <div class="tab" id="tab-console" hidden>
+          <div class="console-bar">
+            <input id="consoleFilter" placeholder="Filter lines…">
+            <label class="toggle"><input type="checkbox" id="consoleScroll" checked> Auto-scroll</label>
+            <button type="button" class="small" id="btnDiagnoseConsole" hidden>🩺 Check for problems</button>
+          </div>
+          <div id="console" class="console"></div>
+          <form id="cmdForm" class="cmd-form" data-perm="console.command" hidden>
+            <span class="prompt">&gt;</span>
+            <input id="cmdInput" autocomplete="off" spellcheck="false" placeholder="Type a command, e.g. say Hello or list">
+            <button class="primary" type="submit">Send</button>
+          </form>
+          <p class="muted small-text" id="consoleNote"></p>
+        </div>
+
+        <div class="tab" id="tab-settings" hidden>
+          <form id="settingsForm" class="settings">
+            <section class="card">
+              <h3>Panel</h3>
+              <div class="form-grid">
+                <div><label for="sName">Name in panel</label><input id="sName" required maxlength="60"></div>
+                <div>
+                  <label for="sInstall">Install folder</label>
+                  <div class="with-button"><input id="sInstall" required><button type="button" data-global="files.browse" data-perm="settings.edit" data-browse="sInstall">Browse…</button></div>
+                </div>
+                <div class="full"><label class="toggle"><input type="checkbox" id="sAutoRestart"> Restart automatically if it crashes</label></div>
+              </div>
+            </section>
+            <section class="card">
+              <h3>Game settings <span class="muted small-text">(changes apply on next restart)</span></h3>
+              <div class="form-grid" id="gameFields"></div>
+            </section>
+            <section class="card" id="profilesCard" hidden>
+              <div class="backup-head">
+                <div>
+                  <h3>Profiles</h3>
+                  <p class="muted small-text">Several setups on one server: each profile is a world plus which mods are on (or vanilla, with the mod loader off). Switching sets both; players' Tavern Client Mod Manager follows the active profile's mods by itself. The active profile remembers changes you make.</p>
+                </div>
+                <div class="spacer"></div>
+                <button type="button" data-perm="settings.edit" id="btnNewProfile">New profile…</button>
+              </div>
+              <div id="profileList" class="profile-list"></div>
+              <!-- Not a <form>: this card sits inside the Settings form, and forms can't be nested. -->
+              <div id="profileForm" class="profile-form" hidden>
+                <input id="pfName" placeholder="Profile name (e.g. Modded run, Vanilla)" maxlength="40">
+                <select id="pfWorld"></select>
+                <input id="pfWorldNew" placeholder="New world name" maxlength="60" hidden>
+                <label class="toggle"><input type="checkbox" id="pfVanilla"> Vanilla (mods off)</label>
+                <button type="button" class="primary" id="pfSave">Create</button>
+                <button type="button" class="ghost" id="pfCancel">Cancel</button>
+              </div>
+            </section>
+            <section class="card" id="difficultyCard" hidden>
+              <h3>Difficulty</h3>
+              <div class="difficulty-row">
+                <select id="difficultySelect"></select>
+                <span class="muted small-text" id="difficultyApplies"></span>
+              </div>
+              <p class="muted small-text" id="difficultyHelp"></p>
+              <p class="warn-text small-text" id="difficultyNote" hidden></p>
+            </section>
+            <section class="card" data-perm="server.update" id="updateCard" hidden>
+              <h3>Server software</h3>
+              <p class="muted">Download the latest official version of the server software (worlds and settings are kept). The server must be stopped.</p>
+              <button type="button" id="btnUpdateSoftware">Update server software</button>
+              <div id="bedrockUpdate" class="bedrock-update" hidden>
+                <div class="bu-versions"><span>Installed: <b id="buCurrent">…</b></span><span>Latest: <b id="buLatest">…</b></span><span class="muted small-text" id="buChecked"></span></div>
+                <div class="btn-row">
+                  <button type="button" class="small" id="btnBuCheck">Check now</button>
+                  <button type="button" class="primary" id="btnBuUpdate" hidden>Update now…</button>
+                  <button type="button" class="small" id="btnBuForce" title="Ask Mojang right now and install the latest Bedrock server, even if this server already looks up to date. The world is backed up first.">⚡ Force update…</button>
+                  <label class="toggle"><input type="checkbox" id="buAuto"> Update automatically</label>
+                </div>
+                <p class="muted small-text" id="buAutoHelp"></p>
+                <p class="muted small-text" id="buForceHelp"></p>
+              </div>
+            </section>
+            <div class="form-actions">
+              <button class="primary" data-perm="settings.edit" type="submit">Save settings</button>
+              <span class="muted" id="settingsStatus"></span>
+            </div>
+            <section class="copy-zone" data-global="servers.create">
+              <div>
+                <h3>Make a copy</h3>
+                <p class="muted">A full copy (world, addons, settings) as a new server, e.g. to test addon updates without touching this world. It gets its own ports, so both can run at once. Safe while this server is running.</p>
+              </div>
+              <button type="button" id="btnClone">Make a copy…</button>
+            </section>
+            <section class="danger-zone" data-perm="server.delete">
+              <div>
+                <h3>Delete this server</h3>
+                <p class="muted">Remove it from Tavern Host, and optionally delete its files and backups too. The server must be stopped.</p>
+              </div>
+              <button type="button" class="red" id="btnDelete">Delete server…</button>
+            </section>
+          </form>
+        </div>
+
+        <div class="tab" id="tab-properties" hidden>
+          <div id="propProblems"></div>
+          <div class="prop-bar">
+            <input id="propFilter" placeholder="Search settings…">
+            <label class="toggle"><input type="checkbox" id="propAdvanced"> Show advanced</label>
+            <div class="spacer"></div>
+            <button type="button" data-perm="properties.edit" id="btnRepairProps" hidden>Repair file</button>
+            <button type="button" class="primary" data-perm="properties.edit" id="btnSaveProps">Save changes</button>
+          </div>
+          <p class="muted small-text" id="propFile"></p>
+          <div id="propList" class="prop-list"></div>
+        </div>
+
+        <div class="tab" id="tab-backups" hidden>
+          <section class="card" id="worldCheckCard" hidden>
+            <div class="backup-head">
+              <div>
+                <h3>World check</h3>
+                <p class="muted small-text">Every backup's copy of the world is checked for chunks that vanished, were regenerated or lost block layers, and for damaged database files. Normal play never causes these, so any hit means the world is being damaged.</p>
+              </div>
+              <div class="spacer"></div>
+              <button type="button" data-perm="backups.restore" id="btnWorldAccept" hidden>Accept as normal</button>
+              <button type="button" data-perm="backups.create" id="btnWorldCheck">Check now</button>
+            </div>
+            <div id="worldCheckStatus" class="world-check"></div>
+            <div id="worldCheckAreas"></div>
+          </section>
+          <section class="card">
+            <div class="backup-head">
+              <div>
+                <h3>Backups</h3>
+                <p class="muted" id="backupHint"></p>
+              </div>
+              <div class="spacer"></div>
+              <button type="button" class="ghost" id="btnOpenBackups" hidden>Open folder</button>
+              <button type="button" class="primary" data-perm="backups.create" id="btnBackupNow">Back up now</button>
+            </div>
+            <p class="job-step" id="backupJob"></p>
+            <table class="table">
+              <thead><tr><th>When</th><th>Type</th><th>World</th><th>Size</th><th>Check</th><th></th></tr></thead>
+              <tbody id="backupRows"></tbody>
+            </table>
+          </section>
+          <section class="card" data-perm="backups.create">
+            <h3>Automatic backups</h3>
+            <div class="schedule-row">
+              <label for="bkEvery">Back up every</label>
+              <input id="bkEvery" type="number" min="0" max="168" class="port-input">
+              <span class="muted">hours while running (0 = off), keeping the newest</span>
+              <input id="bkKeep" type="number" min="1" max="200" class="port-input">
+              <span class="muted">automatic backups</span>
+              <button type="button" id="btnSaveSchedule">Save</button>
+            </div>
+            <p class="muted small-text">Manual backups and the safety copies made before a restore are never deleted automatically.</p>
+          </section>
+          <section class="card" id="copiesCard" hidden>
+            <h3>Copies on another drive <span class="count" id="copyCount"></span></h3>
+            <p class="muted small-text" id="copiesHint"></p>
+            <table class="table">
+              <thead><tr><th>When</th><th>Type</th><th>Size</th><th></th></tr></thead>
+              <tbody id="copyRows"></tbody>
+            </table>
+          </section>
+        </div>
+
+        <div class="tab" id="tab-addons" hidden>
+          <section class="card" data-perm="addons.manage">
+            <div class="backup-head">
+              <div>
+                <div id="addonStatus"></div>
+                <h3 id="addonAddTitle">Add an addon</h3>
+                <p class="muted" id="addonAddHelp">Drop a <b>.mcaddon</b> or <b>.mcpack</b> here, or choose a file. Tavern Host installs its behavior and resource packs and adds them to the world.</p>
+              </div>
+            </div>
+            <label class="drop-zone" id="addonDrop" for="addonFile">
+              <span>Drop addon files here, or <u>choose files</u></span>
+              <input type="file" id="addonFile" multiple hidden>
+            </label>
+            <input type="file" id="addonFolder" webkitdirectory hidden>
+            <div class="addon-location" id="addonLocation" hidden>
+              <label for="addonLocationSelect">Store new addons in</label>
+              <select id="addonLocationSelect"></select>
+              <span class="muted small-text" id="addonLocationHelp"></span>
+            </div>
+            <div id="addonResult"></div>
+          </section>
+
+          <section class="card" data-perm="addons.share" id="addonShareCard" hidden>
+            <div class="installed-head">
+              <h3>Share mods with players</h3>
+              <label class="toggle"><input type="checkbox" id="shareEnabled"> Sharing on</label>
+            </div>
+            <p class="muted">Players install <b>Tavern Client Mod Manager</b>, paste this link once, and their game gets the same mods as this server: new mods are added, updated mods are updated and removed mods are removed (their own extra mods are left alone). "Server only" mods aren't shared.</p>
+            <div class="share-link">
+              <span class="muted small">Player download:</span>
+              <code id="clientDownloadUrl">https://github.com/Volatile111/tavern-client-releases/releases/latest</code>
+              <button type="button" class="small" id="btnCopyClientUrl">Copy</button>
+              <a class="small button-like" href="https://github.com/Volatile111/tavern-client-releases/releases/latest" target="_blank" rel="noopener">Open</a>
+            </div>
+            <div id="shareBody"></div>
+          </section>
+
+          <section class="card" data-perm="addons.manage" id="addonSitesCard" hidden>
+            <h3 id="addonSitesTitle">Get addons</h3>
+            <p class="muted" id="addonSitesHelp"></p>
+            <div class="addon-sites" id="addonSites"></div>
+          </section>
+
+          <section class="card" data-perm="addons.manage" id="nexusCard" hidden>
+            <h3>Add from Hexium or Nexus Mods</h3>
+            <p class="muted" id="nexusHelp"></p>
+            <form class="with-button" id="nexusForm">
+              <input id="nexusInput" placeholder="https://valheim.hexium.gg/mods/Author/Mod · nxm://valheim/mods/… · https://www.nexusmods.com/valheim/mods/…" spellcheck="false" autocomplete="off">
+              <button class="primary" type="submit">Install</button>
+            </form>
+          </section>
+
+          <section class="card" id="cfCard" hidden>
+            <h3>Browse CurseForge</h3>
+            <div id="cfSetup" class="muted" hidden>
+              Add a free CurseForge API key in <b>Settings → Integrations</b> to search and install addons from CurseForge here.
+            </div>
+            <form id="cfForm" class="cf-search" hidden>
+              <input id="cfQuery" placeholder="Search addons, e.g. furniture, guns, backpack…">
+              <button class="primary" type="submit">Search</button>
+            </form>
+            <div id="cfResults" class="cf-results"></div>
+          </section>
+
+          <section class="card" id="addonInstalledCard">
+            <div class="installed-head">
+              <h3>Installed <span class="count" id="addonCount"></span></h3>
+              <div class="move-all" id="addonMoveAll"></div>
+              <button class="small" id="addonCheckUpdates" hidden>Check for updates</button>
+            </div>
+            <p class="warn-banner" id="addonStopNote" hidden>The server is running. Stop it to add, update, switch or remove mods (Valheim keeps mod files locked while it runs).</p>
+            <p class="muted small-text" id="addonRestart" hidden>Restart the server to load changes.</p>
+            <div id="addonList" class="addon-list"></div>
+          </section>
+        </div>
+
+        <div class="tab" id="tab-access" hidden>
+          <div class="sub-tabs" id="listTabs"></div>
+          <section class="card">
+            <p class="muted" id="listHelp"></p>
+            <div id="listEntries" class="list-entries"></div>
+            <form id="listAddForm" class="list-add" data-perm="access.edit">
+              <input id="listAddInput" placeholder="Player ID, e.g. Steam_76561198000000000" list="knownPlayerIds">
+              <datalist id="knownPlayerIds"></datalist>
+              <button class="primary" type="submit">Add</button>
+            </form>
+            <p class="muted small-text">Minecraft servers reload these lists right away. Valheim may only apply changes after a restart.</p>
+          </section>
+        </div>
+
+        <div class="tab" id="tab-worlds" hidden>
+          <section class="card">
+            <div class="backup-head">
+              <div>
+                <h3>Worlds <span class="count" id="worldCount"></span></h3>
+                <p class="muted" id="worldsHint">Every world in this server's folder. The server loads the active one; switching applies at the next start. Export works while the server runs.</p>
+              </div>
+              <div class="spacer"></div>
+              <label class="button-like" data-perm="files.edit" for="worldImportFile" id="worldImportBtn">Import world…</label>
+              <input type="file" id="worldImportFile" hidden>
+            </div>
+            <p class="job-step" id="worldsStatus"></p>
+            <table class="table">
+              <thead><tr><th>World</th><th>Folder</th><th>Size</th><th>Last played</th><th></th></tr></thead>
+              <tbody id="worldRows"></tbody>
+            </table>
+          </section>
+        </div>
+
+        <div class="tab" id="tab-chat" hidden>
+          <section class="card chat-relay" id="chatRelayCard">
+            <div class="chat-relay-row">
+              <div>
+                <h3>Chat relay <span class="pill-mini" id="chatRelayState"></span></h3>
+                <p class="muted small-text" id="chatRelayHelp">Bedrock servers don't record chat. Turning this on adds a small Tavern Host pack to the world that passes chat to the panel (it only reads messages). Takes effect when the server starts or restarts.</p>
+              </div>
+              <div class="chat-relay-actions" data-perm="addons.manage">
+                <label class="inline-label" for="chatModuleVersion">Scripting version</label>
+                <input id="chatModuleVersion" class="version-input" placeholder="2.11.0-beta" spellcheck="false">
+                <button class="primary" id="btnChatRelay">Turn on</button>
+              </div>
+            </div>
+            <p class="muted small-text" id="chatVersionHint"></p>
+            <p class="warn-text small-text" id="chatBetaWarn" hidden>This world doesn't have "Beta APIs" turned on (World tab). The chat relay needs it.</p>
+          </section>
+          <section class="card chat-card">
+            <div class="chat-log" id="chatLog"></div>
+            <form class="chat-send" id="chatForm" data-perm="console.command">
+              <input id="chatInput" maxlength="300" placeholder="Message everyone in the game…" autocomplete="off">
+              <button class="primary" type="submit">Send</button>
+            </form>
+            <p class="muted small-text" id="chatNote"></p>
+          </section>
+        </div>
+
+        <div class="tab" id="tab-world" hidden>
+          <p class="warn-banner" id="worldMissing" hidden>This world hasn't been created yet. Start the server once so it creates the world, stop it, then come back to turn on experiments. (Cheats can be set now.)</p>
+          <section class="card">
+            <h3>Cheats</h3>
+            <label class="toggle world-toggle">
+              <input type="checkbox" id="worldCheats">
+              <span><b>Allow cheats</b><br><span class="muted small-text">Lets operators use commands like /gamemode, /give and /tp. Same as "Cheats" in the game (sets allow-cheats in server.properties).</span></span>
+            </label>
+            <h4 class="section-label">Cheat settings</h4>
+            <p class="muted small-text" id="cheatSettingsOff" hidden>Turn on cheats to change these, like in the game.</p>
+            <div class="cheat-settings" id="cheatSettings"></div>
+          </section>
+          <section class="card">
+            <h3>Experiments <span class="muted small-text" id="worldName"></span></h3>
+            <p class="muted">Same as the Experiments switches in the game's world settings. Addons that need them say so on their download page. Beta APIs is the one most script addons need.</p>
+            <div class="world-exps" id="worldExps"></div>
+            <p class="muted small-text" id="worldEverUsed" hidden>🔒 Like in the game, experiments can't be turned off once they're on: the world may now contain experimental blocks, items or data that would break without them.
+              <a href="#" id="worldUnlock" data-perm="properties.edit">Unlock anyway (advanced)…</a></p>
+          </section>
+          <div class="form-actions" data-perm="properties.edit">
+            <span class="muted small-text" id="worldStatus"></span>
+            <div class="spacer"></div>
+            <button class="ghost" id="worldReset">Undo changes</button>
+            <button class="primary" id="worldSave">Save</button>
+          </div>
+        </div>
+
+        <div class="tab" id="tab-tasks" hidden>
+          <section class="card">
+            <div class="installed-head">
+              <h3>Scheduled tasks <span class="count" id="taskCount"></span></h3>
+              <div class="move-all" data-perm="tasks.edit">
+                <select id="taskPreset" class="preset-select">
+                  <option value="">Quick add…</option>
+                  <option value="restart">Daily restart at 4:00 with warnings</option>
+                  <option value="backup">Backup every 6 hours</option>
+                  <option value="announce">Announcement every 30 minutes</option>
+                  <option value="save">Save the world every 15 minutes</option>
+                </select>
+                <button class="primary" id="btnNewTask">+ New task</button>
+              </div>
+            </div>
+            <p class="muted small-text">Tasks run on this system's clock while Tavern Host is running (the service keeps running when you close the window).</p>
+            <div class="task-list" id="taskList"></div>
+          </section>
+        </div>
+
+        <div class="tab" id="tab-files" hidden>
+          <section class="card">
+            <div class="browse-bar">
+              <button type="button" id="sfUp" title="Up one level">↑ Up</button>
+              <div class="sf-crumbs" id="sfCrumbs"></div>
+              <button type="button" id="sfRefresh" title="Refresh">⟳</button>
+            </div>
+            <div class="browse-tools">
+              <button type="button" class="small" id="sfNewFolder">+ New folder</button>
+              <button type="button" class="small" id="sfNewFile">+ New file</button>
+              <label class="small button-like" for="sfUpload">⬆ Upload files</label>
+              <input type="file" id="sfUpload" multiple hidden>
+              <button type="button" class="small" id="sfExplorer" hidden>Open in Explorer</button>
+              <span class="muted small-text" id="sfInfo"></span>
+            </div>
+            <div class="browse-list sf-list" id="sfList"></div>
+            <p class="muted small-text">Drop files onto the list to upload them into the open folder. Deleted items go to the Recycle Bin. Some files (world data, configs a running server rewrites) are best changed with the server stopped.</p>
+          </section>
+        </div>
+      </div>
+      <div id="settingsView" hidden>
+        <div class="server-head">
+          <div class="server-title">Panel settings</div>
+          <div class="spacer"></div>
+          <button class="ghost" id="btnCloseSettings">Back to servers</button>
+        </div>
+
+        <section class="card" data-global="panel.settings">
+          <h3>Remote access</h3>
+          <p class="muted">Lets people use the panel from other devices (another system, a phone, or over the internet with port forwarding).
+            Uses HTTPS so passwords and API keys are encrypted. This system and the desktop app always work, even when it is off.</p>
+          <div class="remote-row">
+            <label class="toggle"><input type="checkbox" id="remoteEnabled"> Remote access on</label>
+            <label for="remotePort" class="inline-label">Port</label>
+            <input id="remotePort" type="number" min="1024" max="65535" class="port-input">
+            <button class="primary" id="btnRemoteSave">Apply</button>
+          </div>
+          <div id="remoteStatus" class="remote-status"></div>
+          <div class="remote-help">
+            <button class="small" id="btnFirewall">Allow through Windows Firewall…</button>
+            <span class="muted small-text">Windows will ask for admin permission. Needed once so other devices can connect.</span>
+          </div>
+          <p class="muted small-text">The certificate is created by the panel, so browsers show a "not secure / not private" warning the first time.
+            That is expected: continue to the site. Only accounts with "Remote login" ticked can log in remotely.</p>
+        </section>
+
+        <section class="card" data-global="panel.settings">
+          <h3>Nodes (other systems) <span class="count" id="nodeCount"></span></h3>
+          <p class="muted">Manage servers on other systems from this panel. On the other system, open Tavern Host → Settings → <b>Use this system as a node</b>, copy the code, and paste it here.
+            Their servers then show in the list on the left, grouped by system.</p>
+          <div id="nodeList" class="node-list"></div>
+          <div class="with-button">
+            <input id="nodeCode" placeholder="thnode://192.168.1.50:8191/th_…" spellcheck="false" autocomplete="off">
+            <button class="primary" id="btnAddNode">Add node</button>
+          </div>
+        </section>
+
+        <section class="card" data-global="panel.settings" id="nodeCodeCard">
+          <h3>Use this system as a node</h3>
+          <p class="muted">Lets a Tavern Host on another system (e.g. your main system) manage this system's servers. Needs Remote access on (above).
+            The code holds a key that can run this system's servers (but not manage users or settings): treat it like a password, and don't paste it into chats.</p>
+          <div class="btn-row"><button id="btnNodeCode">Make a node code</button><span class="muted small-text" id="nodeCodeStatus"></span></div>
+          <div class="with-button" id="nodeCodeBox" hidden>
+            <input id="nodeCodeValue" readonly class="mono">
+            <button class="primary" id="btnCopyNodeCode">Copy</button>
+          </div>
+        </section>
+
+        <section class="card" data-global="panel.settings">
+          <h3>Backup copies</h3>
+          <p class="muted">Also copy every backup to another drive, a NAS or a network share (e.g. <b>A:\Tavern Host Backups</b>), so worlds survive if this system's disk fails.
+            Each server gets its own folder there. Copies older than the limit are removed, but the newest 3 per server always stay.</p>
+          <div class="remote-row">
+            <label class="toggle"><input type="checkbox" id="bcEnabled"> Copy backups</label>
+            <input id="bcFolder" placeholder="A:\Tavern Host Backups" spellcheck="false" class="folder-input">
+            <label for="bcKeep" class="inline-label">Keep</label>
+            <input id="bcKeep" type="number" min="1" max="3650" class="port-input">
+            <span class="muted">days</span>
+            <button class="primary" id="btnBcSave">Save</button>
+          </div>
+          <div class="btn-row">
+            <button class="small" id="btnBcTest">Test folder</button>
+            <button class="small" id="btnBcSync">Copy existing backups now</button>
+            <span class="muted small-text" id="bcStatus"></span>
+          </div>
+        </section>
+
+        <section class="card" data-global="panel.settings" id="panelUpdateCard">
+          <h3>Update Tavern Host</h3>
+          <div id="appUpdateInfo"><p class="muted">Checking for updates…</p></div>
+          <div class="btn-row">
+            <button class="primary" id="btnInstallUpdate" hidden>Install update</button>
+            <button class="small" id="btnCheckUpdate">Check for updates</button>
+            <button class="small" id="btnUpdateFile" hidden>Update from file…</button>
+            <span class="muted small-text" id="updateStatus"></span>
+          </div>
+          <p class="muted small-text">New versions come from <a href="https://github.com/Volatile111/tavern-host/releases" target="_blank" rel="noopener">GitHub releases</a> and are checked every 6 hours.
+            Installing closes the panel and opens it again by itself; game servers keep running.
+            <span id="updateFileHelp" hidden>"Update from file" installs an installer you already have (any version, including going back).</span></p>
+        </section>
+
+        <section class="card" data-global="users.manage">
+          <div class="installed-head">
+            <h3>Users <span class="count" id="userCount"></span></h3>
+            <input id="userSearch" class="search-input" placeholder="Search users…">
+            <button class="primary" id="btnAddUser">+ Add user</button>
+          </div>
+          <p class="muted small-text">Each user gets a role (or custom permissions) on all servers or only the servers you pick. People who can manage users can never give out more than they have themselves.</p>
+          <div class="user-list" id="usersBody"></div>
+        </section>
+
+        <section class="card" data-global="users.manage">
+          <div class="installed-head">
+            <h3>API keys <span class="count" id="keyCount"></span></h3>
+            <button class="primary" id="btnAddKey">+ Create key</button>
+          </div>
+          <p class="muted">For Discord bots and other programs. A key works like a user with its own permissions, and can expire.</p>
+          <div class="user-list" id="keysBody"></div>
+        </section>
+
+        <section class="card" data-global="audit.view">
+          <div class="installed-head">
+            <h3>Activity log</h3>
+            <select id="activityWho" class="preset-select"><option value="">Everyone</option></select>
+            <input id="activitySearch" class="search-input" placeholder="Search…">
+            <button class="small" id="btnActivityRefresh">⟳</button>
+          </div>
+          <div class="activity" id="activityBody"></div>
+        </section>
+
+        <section class="card" id="integrationsCard" hidden>
+          <h3>Integrations</h3>
+          <p class="muted">Nexus Mods (Valheim): with your personal API key, Valheim servers can install mods from Nexus Mods.
+            Get it at <a href="https://www.nexusmods.com/settings/api-keys" target="_blank" rel="noopener">nexusmods.com → Site preferences → API keys</a>
+            ("Personal API key"). It's checked with Nexus Mods and stored only on this system.</p>
+          <div class="with-button">
+            <input id="nexusKey" type="password" autocomplete="off" placeholder="Nexus Mods API key">
+            <button class="primary" id="btnSaveNexusKey">Save key</button>
+            <button class="ghost" id="btnRemoveNexusKey">Remove</button>
+          </div>
+          <p class="muted small-text" id="nexusKeyStatus"></p>
+          <div id="cfIntegration" hidden>
+            <p class="muted">CurseForge: lets you search and install mods and Bedrock addons from CurseForge inside Tavern Host.
+              Get a free API key at <a href="https://console.curseforge.com/" target="_blank" rel="noopener">console.curseforge.com</a>
+              and paste it here. It's stored only on this system.</p>
+            <div class="with-button">
+              <input id="cfKey" type="password" autocomplete="off" placeholder="CurseForge API key">
+              <button class="primary" id="btnSaveCfKey">Save key</button>
+              <button class="ghost" id="btnRemoveCfKey">Remove</button>
+            </div>
+            <p class="muted small-text" id="cfKeyStatus"></p>
+          </div>
+        </section>
+
+        <section class="card" data-global="users.manage">
+          <h3>API reference</h3>
+          <p class="muted">Send the key in a header with every request: <code>Authorization: Bearer th_…</code> (or <code>X-Api-Key: th_…</code>). Keys made before the Tavern Host rename start with <code>gsp_</code> and still work.
+            Use <code id="apiBase">http://127.0.0.1:8190</code> on this system, or the remote address (<code>https://…</code>) from elsewhere. Bodies are JSON (<code>Content-Type: application/json</code>).
+            Each request needs the permission shown, on that server (or all servers) for the key; the owner can do everything.</p>
+          <input id="apiSearch" class="search-input" placeholder="Filter requests…">
+          <div id="apiRef" class="api-ref"></div>
+          <p class="muted small-text">Examples:<br>
+            <code>curl -H "Authorization: Bearer th_…" http://127.0.0.1:8190/api/servers</code><br>
+            <code>curl -X POST -H "Authorization: Bearer th_…" -H "Content-Type: application/json" -d "{\"command\":\"say hi\"}" http://127.0.0.1:8190/api/servers/{id}/command</code><br>
+            Live updates: <code>GET /api/events</code> is a Server-Sent Events stream (<code>server</code>, <code>line</code> and <code>removed</code> events) for everything the key can see.</p>
+        </section>
+      </div>
+    </main>
+  </div>
+</section>
+
+<dialog id="userDialog" class="wide-dialog perm-dialog">
+  <form id="userForm" class="dialog-body">
+    <h2 id="userDialogTitle">Add user</h2>
+    <h4 class="section-label">Account</h4>
+    <div class="form-grid">
+      <div><label for="uName">Username</label><input id="uName" autocomplete="off" required maxlength="32"></div>
+      <div>
+        <label for="uPass" id="uPassLabel">Password (8+ characters)</label>
+        <div class="with-button"><input id="uPass" type="text" autocomplete="new-password" spellcheck="false"><button type="button" class="small" id="uGenPass" title="Make a random password">Generate</button></div>
+      </div>
+      <div class="full checks">
+        <label class="toggle"><input type="checkbox" id="uRemote"> Can log in from other devices (remote access)</label>
+        <label class="toggle" id="uMustWrap"><input type="checkbox" id="uMust"> Must choose a new password at next login</label>
+        <label class="toggle" id="uDisabledWrap"><input type="checkbox" id="uDisabled"> Account disabled (can't log in)</label>
+      </div>
+      <div class="full"><label for="uNote">Note (only seen by people who manage users)</label><input id="uNote" maxlength="500" placeholder="e.g. Discord: Bob — moderator for the SMP"></div>
+    </div>
+    <div id="uPerms"></div>
+    <p class="error" id="userError"></p>
+    <div class="form-actions">
+      <button class="primary" type="submit">Save</button>
+      <button type="button" class="ghost" id="userCancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="keyDialog" class="wide-dialog perm-dialog">
+  <form id="keyForm" class="dialog-body">
+    <h2 id="keyDialogTitle">Create API key</h2>
+    <div class="form-grid">
+      <div><label for="kName">Name</label><input id="kName" required maxlength="60" placeholder="Discord bot"></div>
+      <div><label for="kExpires">Expires</label>
+        <select id="kExpires">
+          <option value="">Never</option>
+          <option value="7">In 7 days</option>
+          <option value="30">In 30 days</option>
+          <option value="90">In 90 days</option>
+          <option value="365">In a year</option>
+        </select>
+      </div>
+    </div>
+    <div id="kPerms"></div>
+    <p class="error" id="keyError"></p>
+    <div class="form-actions">
+      <button class="primary" type="submit" id="keySave">Create key</button>
+      <button type="button" class="ghost" id="keyCancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="portsDialog" class="wide-dialog">
+  <div class="dialog-body">
+    <h2>Let players outside your network join</h2>
+    <p class="muted">Players on your own network can use the IP shown on the server page. Everyone else connects to your <b>public IP</b>, and your router has to pass those ports on to this system ("port forwarding", in the router's settings page).</p>
+    <div id="portsBody"><p class="muted">Loading…</p></div>
+    <div class="form-actions"><div class="spacer"></div><button id="portsClose">Close</button></div>
+  </div>
+</dialog>
+
+<dialog id="aboutDialog">
+  <div class="dialog-body about">
+    <h2><img src="/logo.svg" alt="" width="32" height="32"> Tavern Host <span class="muted" id="aboutVersion"></span></h2>
+    <p><span class="build-badge beta">Beta</span> Tavern Host is actively being worked on and updates are frequent. If something goes wrong, please report it.</p>
+    <div class="about-links">
+      <a class="button-like" id="aboutReport" href="https://github.com/Volatile111/tavern-host/issues/new/choose" target="_blank" rel="noopener">Report a problem</a>
+      <a class="button-like" href="https://github.com/Volatile111/tavern-host/issues" target="_blank" rel="noopener">Known problems</a>
+      <a class="button-like" href="https://github.com/Volatile111/tavern-host/releases" target="_blank" rel="noopener">What's new</a>
+      <a class="button-like" href="https://github.com/Volatile111/tavern-client-releases/releases/latest" target="_blank" rel="noopener">Player mod manager</a>
+      <a class="button-like" href="https://github.com/Volatile111/tavern-host/blob/main/API.md" target="_blank" rel="noopener">API reference</a>
+    </div>
+    <p class="muted small-text">Created by CorruptedVariant. Free software under the <a href="https://github.com/Volatile111/tavern-host/blob/main/LICENSE" target="_blank" rel="noopener">GNU GPL v3</a>:
+      you may use, change and share it, and the <a href="https://github.com/Volatile111/tavern-host" target="_blank" rel="noopener">source code</a> is public. It comes with no warranty.
+      Not affiliated with Mojang, Microsoft, Iron Gate or Coffee Stain.</p>
+    <div class="form-actions"><div class="spacer"></div><button id="aboutClose">Close</button></div>
+  </div>
+</dialog>
+
+<dialog id="keyShowDialog">
+  <div class="dialog-body">
+    <h2>Your new API key</h2>
+    <p>Copy it now. For security it is <b>not shown again</b>. If you lose it, delete it and create a new one.</p>
+    <div class="with-button"><input id="newKey" readonly class="mono"><button class="primary" id="btnCopyKey">Copy</button></div>
+    <div class="form-actions"><div class="spacer"></div><button id="keyShowClose">Done</button></div>
+  </div>
+</dialog>
+
+<dialog id="cloneDialog">
+  <form id="cloneForm" class="dialog-body">
+    <h2>Make a copy of <span id="cloneSource"></span></h2>
+    <label for="cloneName">Name of the copy</label>
+    <input id="cloneName" maxlength="60" required>
+    <label for="cloneFolder">Folder for the copy (new or empty)</label>
+    <input id="cloneFolder" required spellcheck="false">
+    <p class="muted small-text">Copying a big world can take a few minutes; progress shows in this server's console. The copy appears in the list when it's done.</p>
+    <p class="error" id="cloneError"></p>
+    <div class="form-actions">
+      <button class="primary" type="submit">Make the copy</button>
+      <button type="button" class="ghost" id="cloneCancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="countdownDialog">
+  <form id="countdownForm" class="dialog-body">
+    <h2>Countdown</h2>
+    <p class="muted">Players are warned in-game (gold [Server] messages) at each step and in the last 10 seconds.</p>
+    <div class="form-grid">
+      <div><label for="cdAction">Then</label>
+        <select id="cdAction"><option value="restart">Restart</option><option value="stop">Stop</option></select></div>
+      <div><label for="cdMinutes">In</label>
+        <select id="cdMinutes"><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5" selected>5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></div>
+    </div>
+    <label for="cdMessage">Message (optional; {time} becomes "5 minutes")</label>
+    <input id="cdMessage" maxlength="200" placeholder="Server restarting in {time} for an update!">
+    <div class="form-actions">
+      <button class="primary" type="submit">Start countdown</button>
+      <button type="button" class="ghost" id="cdCancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="deleteDialog">
+  <form id="deleteForm" class="dialog-body">
+    <h2>Delete <span id="delName"></span>?</h2>
+    <p>It will be removed from Tavern Host along with its tasks, player history and statistics.</p>
+    <label class="toggle"><input type="checkbox" id="delFiles"> Also delete the server folder</label>
+    <p class="muted mono small-path" id="delFolder"></p>
+    <label class="toggle"><input type="checkbox" id="delBackups"> Also delete its backups</label>
+    <p class="muted" id="delBackupInfo"></p>
+    <div id="delConfirmBox" hidden>
+      <p class="warn-text">Deleted files go to the Recycle Bin, where you can get them back until it is emptied. Type the server name to confirm.</p>
+      <input id="delConfirm" autocomplete="off" spellcheck="false">
+    </div>
+    <p class="error" id="deleteError"></p>
+    <div class="form-actions">
+      <button class="red" type="submit" id="delSubmit">Remove from Tavern Host</button>
+      <button type="button" class="ghost" id="deleteCancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="accountDialog">
+  <form id="accountForm" class="dialog-body">
+    <h2>Change your password</h2>
+    <label for="aCurrent">Current password</label><input id="aCurrent" type="password" autocomplete="current-password" required>
+    <label for="aNew">New password (8+ characters)</label><input id="aNew" type="password" autocomplete="new-password" required minlength="8">
+    <p class="error" id="accountError"></p>
+    <div class="form-actions">
+      <button class="primary" type="submit">Change password</button>
+      <button type="button" class="ghost" id="accountCancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="addDialog">
+  <form id="addForm" class="dialog-body">
+    <h2>Import a server</h2>
+    <p class="muted">For a server you already have the files for. To start from nothing, use <b>+ New</b> instead.</p>
+    <label for="addGame">Game</label>
+    <select id="addGame"></select>
+    <label for="addName">Name in panel</label>
+    <input id="addName" required maxlength="60" placeholder="Valheim test">
+    <label for="addInstall">Install folder (where the server files are)</label>
+    <div class="with-button">
+      <input id="addInstall" required placeholder="C:\GameServers\My server">
+      <button type="button" data-global="files.browse" data-browse="addInstall">Browse…</button>
+    </div>
+    <p class="error" id="addError"></p>
+    <div class="form-actions">
+      <button class="primary" type="submit">Add server</button>
+      <button type="button" class="ghost" id="addCancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="newDialog" class="wide-dialog">
+  <form id="newForm" class="dialog-body">
+    <h2>New server</h2>
+    <p class="muted">Tavern Host downloads the official server software for you. It can take a few minutes.</p>
+    <label>Game</label>
+    <div class="game-picks" id="newGamePicks"></div>
+    <select id="newGame" hidden></select>
+    <div class="form-grid">
+      <div class="full"><label for="newName">Name in panel</label><input id="newName" required maxlength="60" placeholder="My Valheim server"></div>
+      <div class="full">
+        <label for="newFolder">Folder to install into (new or empty)</label>
+        <div class="with-button">
+          <input id="newFolder" required placeholder="C:\GameServers\My Valheim server">
+          <button type="button" data-global="files.browse" data-browse="newFolder">Browse…</button>
+        </div>
+        <div class="field-help">Pick a folder with Browse, or type a new path; it's created for you.</div>
+      </div>
+    </div>
+    <div class="form-grid" id="newFields"></div>
+    <div id="newEulaWrap" class="eula" hidden>
+      <label class="toggle"><input type="checkbox" id="newEula"> <span id="newEulaLabel"></span></label>
+      <a id="newEulaLink" href="https://www.minecraft.net/eula" target="_blank" rel="noopener">Read the EULA</a>
+    </div>
+    <p class="error" id="newError"></p>
+    <div class="form-actions">
+      <button class="primary" type="submit" id="newSubmit">Create server</button>
+      <button type="button" class="ghost" id="newCancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="browseDialog" class="browse">
+  <div class="dialog-body">
+    <h2 id="browseTitle">Choose a folder</h2>
+    <div class="browse-bar">
+      <button type="button" id="browseUp" title="Up one level">↑ Up</button>
+      <input id="browsePath" spellcheck="false" placeholder="This System">
+      <button type="button" id="browseGo">Go</button>
+    </div>
+    <div class="browse-tools">
+      <button type="button" class="small" id="browseNew">+ New folder</button>
+      <button type="button" class="small" id="browseNative" hidden>Windows folder picker…</button>
+      <span class="muted small-text" id="browseInfo"></span>
+    </div>
+    <div class="browse-list" id="browseList"></div>
+    <div class="form-actions">
+      <span class="muted small-text browse-selected" id="browseSelected"></span>
+      <div class="spacer"></div>
+      <button type="button" class="ghost" id="browseCancel">Cancel</button>
+      <button type="button" class="primary" id="browseSelect">Select this folder</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="taskDialog" class="wide-dialog task-dialog">
+  <form method="dialog" class="dialog-body" id="taskForm">
+    <h2 id="taskDialogTitle">New task</h2>
+    <label for="taskName">Name</label>
+    <input id="taskName" maxlength="80" placeholder="e.g. Nightly restart" required>
+
+    <label>When</label>
+    <div class="segmented three" id="taskWhen">
+      <button type="button" data-when="interval">Every…</button>
+      <button type="button" data-when="daily">At set times</button>
+      <button type="button" data-when="manual">Only by hand</button>
+    </div>
+    <div class="when-fields" id="whenInterval">
+      Every <input type="number" id="taskEvery" min="1" value="60" class="port-input">
+      <select id="taskEveryUnit"><option value="1">minutes</option><option value="60" selected>hours</option><option value="1440">days</option></select>
+    </div>
+    <div class="when-fields" id="whenDaily">
+      <div>At <input id="taskTimes" placeholder="04:00, 16:00" value="04:00"> <span class="muted small-text">24-hour times, separated by commas</span></div>
+      <div class="day-picks" id="taskDays"></div>
+      <span class="muted small-text">No days ticked = every day.</span>
+    </div>
+    <label class="toggle"><input type="checkbox" id="taskOnlyRunning"> Only run if the server is running</label>
+
+    <label>Jobs <span class="muted small-text">(run in this order)</span></label>
+    <div class="job-list" id="taskJobs"></div>
+    <div class="job-add" id="taskJobAdd"></div>
+
+    <p class="error" id="taskError"></p>
+    <div class="form-actions">
+      <label class="toggle"><input type="checkbox" id="taskEnabled" checked> Enabled</label>
+      <div class="spacer"></div>
+      <button type="button" class="ghost" id="taskCancel">Cancel</button>
+      <button type="submit" class="primary" id="taskSave">Save task</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="editDialog" class="edit-dialog">
+  <div class="dialog-body">
+    <div class="edit-head">
+      <h2 id="editTitle">Edit file</h2>
+      <span class="muted small-text" id="editInfo"></span>
+    </div>
+    <textarea id="editText" spellcheck="false" wrap="off"></textarea>
+    <div class="form-actions">
+      <span class="muted small-text">Ctrl+S saves. The previous version is kept as <code>.tavernhost-bak</code>.</span>
+      <div class="spacer"></div>
+      <button type="button" class="ghost" id="editClose">Close</button>
+      <button type="button" class="primary" id="editSave">Save</button>
+    </div>
+  </div>
+</dialog>
+
+<div id="toast"></div>
+</body>
+</html>

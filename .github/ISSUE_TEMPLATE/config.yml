@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Download Tavern Host
+    url: https://github.com/Volatile111/tavern-host/releases/latest
+    about: The latest Tavern Host installer.
+  - name: Download Tavern Client Mod Manager
+    url: https://github.com/Volatile111/tavern-client-releases/releases/latest
+    about: The players' app for Valheim mods.

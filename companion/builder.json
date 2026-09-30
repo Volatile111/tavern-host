@@ -1,0 +1,28 @@
+{
+  "appId": "com.tavernhost.clientmodmanager",
+  "productName": "Tavern Client Mod Manager",
+  "directories": { "output": "release" },
+  "extraMetadata": {
+    "name": "tavern-client-mod-manager",
+    "productName": "Tavern Client Mod Manager",
+    "version": "0.4.0",
+    "main": "companion/main.js"
+  },
+  "files": ["companion/**", "dist/valheim-mods.js", "dist/zip.js", "dist/modscan.js", "dist/nexus.js", "dist/modsync/**", "package.json"],
+  "asar": false,
+  "win": { "target": "nsis", "icon": "companion/icon.ico" },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Tavern Client Mod Manager",
+    "runAfterFinish": true,
+    "installerIcon": "companion/icon.ico",
+    "uninstallerIcon": "companion/icon.ico",
+    "license": "LICENSE",
+    "artifactName": "Tavern-Client-Mod-Manager-Setup-${version}.exe"
+  },
+  "publish": [{ "provider": "github", "owner": "Volatile111", "repo": "tavern-client-releases", "releaseType": "release" }]
+}

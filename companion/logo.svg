@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Tavern Client Mod Manager: the same tankard, holding a mod (puzzle piece), with a sync badge. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9a4516"/>
+      <stop offset="1" stop-color="#3a1807"/>
+    </linearGradient>
+    <linearGradient id="ale" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffc861"/>
+      <stop offset="1" stop-color="#e08a1e"/>
+    </linearGradient>
+  </defs>
+  <!-- tile -->
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#bg)"/>
+  <!-- handle -->
+  <path d="M168 104 h14 a26 26 0 0 1 26 26 v24 a26 26 0 0 1 -26 26 h-14" fill="none" stroke="#f0a73a" stroke-width="18" stroke-linecap="round"/>
+  <!-- mug body -->
+  <rect x="56" y="88" width="120" height="124" rx="16" fill="url(#ale)"/>
+  <!-- puzzle piece (a mod) -->
+  <path fill="#4a1f06" d="
+    M84 120 h20 a12 12 0 1 1 24 0 h20 v22 a12 12 0 1 1 0 24 v22 h-22 a12 12 0 1 0 -20 0 h-22 z"/>
+  <!-- foam head -->
+  <path d="M52 96 c-4 -18 12 -30 26 -26 c4 -14 24 -20 36 -10 c10 -12 32 -8 36 8 c16 -4 30 10 26 28 z" fill="#fff4dc"/>
+  <!-- sync badge (bottom right) -->
+  <circle cx="196" cy="198" r="38" fill="#2a1204" stroke="#fff4dc" stroke-width="6"/>
+  <g fill="none" stroke="#ffc861" stroke-width="8" stroke-linecap="round">
+    <path d="M178 192 a19 19 0 0 1 33 -9"/>
+    <path d="M214 204 a19 19 0 0 1 -33 9"/>
+  </g>
+  <path d="M206 170 l12 12 l-16 4 z" fill="#ffc861"/>
+  <path d="M186 226 l-12 -12 l16 -4 z" fill="#ffc861"/>
+</svg>

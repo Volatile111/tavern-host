@@ -1,0 +1,8 @@
+{
+  "name": "tavern-host-desktop",
+  "productName": "Tavern Host",
+  "version": "0.3.6",
+  "private": true,
+  "type": "module",
+  "main": "main.js"
+}
