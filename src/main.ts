@@ -624,7 +624,8 @@ function needStorage(ctx: Ctx, method?: string): Principal {
 
 /** Who asked, for Tavern Vault's activity log. A master panel passes its own "who" through the node link. */
 function vaultVia(p: Principal, body: { via?: unknown }): string {
-  if (p.kind === 'apikey' && typeof body.via === 'string' && body.via) return `${body.via}`.slice(0, 80);
+  // The key's own name is always kept, so a key can't make its changes look like someone else's.
+  if (p.kind === 'apikey' && typeof body.via === 'string' && body.via) return `${body.via.slice(0, 60)} [key: ${p.name}]`.slice(0, 100);
   return `Tavern Host · ${p.name}`.slice(0, 80);
 }
 

@@ -4,6 +4,8 @@
 
 **Fixed**
 - Valheim: Kall could show as defeated when it wasn't, on worlds made before 1.0 (or with mods that add their own "defeated" markers). Tavern Host no longer guesses: Kall shows "?" with the marker it found until Kall's own marker is known.
+- Storage changes made with an API key always show that key's name in Tavern Vault's activity log.
+- 0.5.0 and 0.5.1 are now on GitHub too, so copies on those versions get updates from the app.
 
 ## Tavern Host 0.5.1
 
