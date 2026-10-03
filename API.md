@@ -1,6 +1,6 @@
 # Tavern Host HTTP API
 
-Reference for Tavern Host 0.4.3. This file is generated from the list in `public/app.js` (the same one the panel shows in Settings → API reference) by `node tools/make-api-docs.mjs`.
+Reference for Tavern Host 0.5.2. This file is generated from the list in `public/app.js` (the same one the panel shows in Settings → API reference) by `node tools/make-api-docs.mjs`.
 
 > Tavern Host is in beta and updates are frequent. Routes can change between versions; check this file for the version you run.
 
@@ -28,6 +28,7 @@ curl -X POST -H "Authorization: Bearer th_…" -H "Content-Type: application/jso
 
 ## Contents
 
+- [Storage (Tavern Vault)](#storage-tavern-vault)
 - [General](#general)
 - [Servers](#servers)
 - [Control & console](#control--console)
@@ -39,6 +40,18 @@ curl -X POST -H "Authorization: Bearer th_…" -H "Content-Type: application/jso
 - [Tasks](#tasks)
 - [Server files](#server-files)
 - [Users, keys & panel](#users-keys--panel)
+
+## Storage (Tavern Vault)
+
+| Request | What it does | Permission |
+|---|---|---|
+| `GET /api/vault` | Storage on this system: {"state":"ok","status":{pools, disks, arrays, jobs, problems…}} or why it isn't available ("missing" = Tavern Vault not installed, "off" = its node mode is off, "nokey"/"down" = its service isn't reachable) | See storage |
+| `GET /api/vault/summary` | Storage at a glance for this system and every node | See storage |
+| `POST /api/vault/call` | Run a Tavern Vault call: {"method","args"} → {"ok","data"\|"error"}. Reading (state, inventory, arrays, schedules, activity, scrubInfo, discoverArrays, validateArray, snapraidRunning) needs See storage; everything else (createPool, createVolume, addDisks, retireDisk, removeDisk, repairVolume, resizeVolume, attachPool, rename, deleteVolume, deletePool, eraseDisk, saveArray, snapraidRun, createSchedule…) needs Manage storage. Tavern Vault's practice mode and safety checks apply. | See / Manage storage |
+| `GET /api/vault/events?since=` | SnapRAID output and finish events after sequence number since | See storage |
+| `GET /api/nodes/{node}/vault` | The same, for a node (through its node link; the node needs Tavern Host 0.5.0+ and Tavern Vault in node mode) | See storage |
+| `POST /api/nodes/{node}/vault/call` | Run a Tavern Vault call on a node | See / Manage storage |
+| `GET /api/nodes/{node}/vault/events?since=` | SnapRAID output on a node | See storage |
 
 ## General
 
@@ -223,7 +236,7 @@ curl -X POST -H "Authorization: Bearer th_…" -H "Content-Type: application/jso
 | `POST /api/nodes` | Add a node: {"code":"thnode://…","name"?} | Panel settings |
 | `PUT /api/nodes/{node}` | Rename a node: {"name"} | Panel settings |
 | `DELETE /api/nodes/{node}` | Remove a node (its servers keep running there) | Panel settings |
-| `POST /api/node-code` | Make a code so another panel can manage this system: {"label"?} (on this system only; needs Remote access on) | Panel settings |
+| `POST /api/node-code` | Make a code so another panel can manage this system (servers, and storage if Tavern Vault is in node mode): {"label"?} (on this system only; needs Remote access on) | Panel settings |
 | `GET /api/files?path=` | Browse any folder on this system | Browse all files on this system |
 | `POST /api/files/mkdir` | New folder: {"parent","name"} | Browse all files on this system |
 | `POST /api/files/rename` | Rename: {"path","name"} (not folders a running server uses) | Browse all files on this system |
