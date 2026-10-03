@@ -1,5 +1,12 @@
 # Changelog
 
+## Tavern Host 0.4.1
+
+**Fixed**
+- Importing a world (.mcworld or .zip) did nothing in the desktop app. The same went for kick/ban reasons, player notes, the countdown before a game update and renaming a node: they now use Tavern Host's own dialog.
+- Servers added on a node now show up on the main panel even after the connection to the node dropped quietly (network blip, the node sleeping or restarting). The main panel reconnects by itself and re-checks each node's servers every 2 minutes.
+- Port forwarding help for Valheim now says TCP & UDP.
+
 ## Tavern Host 0.4.0
 
 The first public release.
