@@ -233,10 +233,22 @@ async function refreshServers(node: NodeRecord) {
   }
 }
 
+// The node pings its live stream every 25 s. A connection that dies without closing (network blip, the router
+// forgetting an idle connection, the node sleeping or rebooting) would otherwise look connected forever, and every
+// later change on the node (new servers, status) would be missed. No data for this long = dead: reconnect.
+const STREAM_SILENCE_MS = 70_000;
+// While connected, the full server list is fetched again this often too, in case an event was missed anyway.
+const REFRESH_MS = 2 * 60_000;
+
 function connect(node: NodeRecord) {
   const s = state(node.id);
   if (s.retry) clearTimeout(s.retry);
+  let watchdog: NodeJS.Timeout | null = null;
+  let done = false;
   const retry = (err: string) => {
+    if (done) return;
+    done = true;
+    if (watchdog) clearInterval(watchdog);
     const wasOnline = s.online;
     s.online = false;
     s.error = s.restarting ? 'Restarting (update)…' : err;
@@ -259,9 +271,22 @@ function connect(node: NodeRecord) {
       s.error = null;
       s.restarting = false;
       events.emit('nodes');
+      let lastData = Date.now();
+      let lastRefresh = Date.now();
+      watchdog = setInterval(() => {
+        if (Date.now() - lastData > STREAM_SILENCE_MS) {
+          res.destroy();
+          retry('The node stopped answering.');
+        } else if (Date.now() - lastRefresh > REFRESH_MS) {
+          lastRefresh = Date.now();
+          refreshServers(node).catch(() => {});
+        }
+      }, 10_000);
+      watchdog.unref();
       let buf = '';
       res.setEncoding('utf-8');
       res.on('data', (chunk: string) => {
+        lastData = Date.now();
         buf += chunk;
         let at: number;
         while ((at = buf.indexOf('\n\n')) >= 0) {
@@ -277,6 +302,7 @@ function connect(node: NodeRecord) {
         }
       });
       res.on('end', () => retry('The node closed the connection.'));
+      res.on('close', () => retry('The node closed the connection.'));
       res.on('error', (err) => retry(err.message));
     } catch (err) {
       retry((err as Error).message);

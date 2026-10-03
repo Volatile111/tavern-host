@@ -8,7 +8,7 @@ import { lookupPublicIp } from './public-ip.ts';
 import type { ServerRecord } from './games/types.ts';
 
 export interface Forward {
-  protocol: 'UDP' | 'TCP';
+  protocol: 'UDP' | 'TCP' | 'TCP & UDP';
   ports: string;
   why: string;
 }
@@ -95,9 +95,10 @@ export async function portHelp(record: ServerRecord, connection: { port: number 
     notes.push('Restart the server after changing server-udp-ports.');
   } else if (record.game === 'valheim') {
     const p = port ?? 2456;
-    forwards.push({ protocol: 'UDP', ports: `${p}-${p + 1}`, why: 'The game port and the one after it (Steam uses both).' });
+    // The game itself talks over UDP (Steam networking); many guides and routers forward TCP too, which is harmless.
+    forwards.push({ protocol: 'TCP & UDP', ports: `${p}-${p + 1}`, why: 'The game port and the one after it. UDP is what the game uses; forwarding TCP as well is harmless and what many guides suggest.' });
     if (record.settings.crossplay === true || record.settings.crossplay === 'true') {
-      notes.push('Crossplay is on: players can also join with the join code, which goes through a relay and needs no port forward.');
+      notes.push('Crossplay is on: players can also join with the join code, which goes through a relay and needs no port forward (so joining by code works even without the forward).');
     }
     notes.push('Players join from the Join Game tab → Add server, with your public IP and port.');
   } else if (port) {
