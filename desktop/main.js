@@ -194,8 +194,12 @@ function createWindow() {
     win.show();
     if (dev) win.setOverlayIcon(devBadge(), 'Development panel');
   });
-  // Keep our title (the page's <title> also says which build it is, but don't let it drift).
-  win.on('page-title-updated', (e) => e.preventDefault());
+  // Keep our title, except for the panel's own names (Tavern Host / Tavern Master / Tavern Super, set by the page from
+  // what this panel manages).
+  win.on('page-title-updated', (e, title) => {
+    e.preventDefault();
+    if (/^Tavern (Host|Master|Super|Node|Super Node)( – Development Panel)?$/.test(title)) win.setTitle(title);
+  });
   // The addon browser is a separate window; close it together with the panel.
   win.on('closed', () => {
     if (browser && !browser.isDestroyed()) browser.close();

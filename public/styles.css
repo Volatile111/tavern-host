@@ -288,6 +288,25 @@ button.force { background: transparent; color: #fcd34d; border-color: #b45309; }
 #serverList .node-head:first-child { border-top: none; margin-top: 0; }
 .node-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); flex: none; }
 .node-dot.off { background: var(--red); box-shadow: none; }
+/* Storage (Tavern Vault): one link per system in the sidebar, and its page in a frame. */
+#serverList a.storage-link { padding-top: 7px; padding-bottom: 7px; }
+#serverList a.storage-link .srv-icon { display: grid; place-items: center; font-size: 15px; }
+#serverList .storage-link.lvl-ok .dot { background: var(--green); }
+#serverList .storage-link.lvl-warn .dot { background: var(--amber); }
+#serverList .storage-link.lvl-crit .dot { background: var(--red); }
+#serverList .storage-link.lvl-none .dot { background: var(--muted); }
+#storageView { display: flex; flex-direction: column; height: 100%; }
+#storageView[hidden] { display: none; }
+.storage-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.storage-head h2 { margin: 0; }
+.storage-frame { flex: 1; width: 100%; min-height: 600px; border: 1px solid var(--border); border-radius: 12px; background: #0b1116; }
+.storage-need { max-width: 760px; }
+.storage-need h3 { margin-top: 0; }
+.storage-need ol { margin: 8px 0 0; padding-left: 20px; }
+.storage-systems { display: grid; gap: 6px; margin-top: 10px; }
+.storage-sys { display: grid; grid-template-columns: 140px 1fr; gap: 10px; padding: 8px 12px; border-radius: 8px; background: var(--panel-2); border-left: 3px solid var(--muted); font-size: 13px; }
+.storage-sys.ok { border-left-color: var(--green); }
+.storage-sys.warn { border-left-color: var(--amber); }
 .node-state { font: 600 11px system-ui, sans-serif; color: #fca5a5; }
 .node-list { display: grid; gap: 8px; margin-bottom: 10px; }
 .node-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--panel-2); border-radius: 10px; }

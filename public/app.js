@@ -98,6 +98,34 @@ function show(view) {
   for (const v of ['viewSetup', 'viewLogin', 'viewApp']) $(v).hidden = v !== view;
 }
 
+/**
+ * The panel's name follows what it does: "Tavern Host", "Tavern Master" (only manages other systems) or "Tavern Super"
+ * (manages other systems and has its own servers or storage). Sent by the service with /api/me and the storage summary.
+ */
+function applyPanelName(panel) {
+  if (panel) state.panel = panel;
+  const name = state.panel?.name ?? 'Tavern Host';
+  const brand = document.querySelector('.brand span');
+  if (brand) brand.textContent = name;
+  document.querySelectorAll('.auth-brand span').forEach((s) => (s.textContent = name));
+  document.title = state.dev ? `${name} – Development Panel` : name;
+  if (brand)
+    brand.title =
+      {
+        master: 'Tavern Master: this panel manages other systems (nodes) and has no game servers or storage of its own.',
+        super: 'Tavern Super: this panel manages other systems (nodes) and has its own game servers or storage too.',
+        node: 'Tavern Node: a main panel on another system manages this one.',
+        supernode: 'Tavern Super Node: a main panel on another system manages this one, and Tavern Vault is here too.',
+      }[state.panel?.role] ?? '';
+}
+
+/** Asks the service again (after nodes or servers change). */
+async function refreshPanelName() {
+  try {
+    applyPanelName((await api('GET', '/api/me')).panel);
+  } catch {}
+}
+
 /** Labels the panel as the release build or the development (test) build, so the two can't be confused. */
 function showBuild(build) {
   const dev = build === 'development';
@@ -108,7 +136,8 @@ function showBuild(build) {
   beta.title = 'Tavern Host is in beta: it is actively being worked on and updates are frequent.';
   $('appVersion').appendChild(beta);
   document.body.classList.toggle('dev-build', dev);
-  document.title = dev ? 'Tavern Host – Development Panel' : 'Tavern Host';
+  state.dev = dev;
+  applyPanelName(state.panel);
   if (dev && !$('devBanner')) {
     const bar = el('div', 'dev-banner', 'DEVELOPMENT PANEL · test copy running from source · your live servers are on the release panel');
     bar.id = 'devBanner';
@@ -121,6 +150,7 @@ function showBuild(build) {
 async function boot() {
   const me = await api('GET', '/api/me');
   $('appVersion').textContent = me.version ? `v${me.version}` : '';
+  state.panel = me.panel ?? null;
   showBuild(me.build);
   state.build = me.build;
   state.version = me.version;
@@ -189,8 +219,10 @@ async function enterApp(user) {
     // The service checks GitHub every 6 hours; asking it hourly just picks that up.
     setInterval(() => loadAppUpdate(false), 3600_000);
   }
+  await loadVaultSummary();
   const first = location.hash.slice(1) || [...state.servers.keys()][0];
-  if (first && state.servers.has(first)) selectServer(first);
+  if (first?.startsWith('storage:') && hasGlobal('storage.view')) showStorage(first.slice(8));
+  else if (first && state.servers.has(first)) selectServer(first);
 }
 
 // ---------- live updates ----------
@@ -222,7 +254,10 @@ function connectEvents() {
     if (w.phase === 'progress') renderWorldCheckProgress(w.done, w.total);
     else loadBackups();
   });
-  es.addEventListener('nodes', () => !$('settingsView').hidden && loadNodes());
+  es.addEventListener('nodes', () => {
+    if (!$('settingsView').hidden) loadNodes();
+    refreshPanelName();
+  });
   es.addEventListener('chat', (e) => {
     const { id, message } = JSON.parse(e.data);
     if (id === state.selected && state.tab === 'chat') addChatMessage(message, true);
@@ -314,6 +349,12 @@ function renderSidebar() {
     if (!byNode.has(nk)) byNode.set(nk, { name: s.node?.name ?? 'This System', servers: [] });
     byNode.get(nk).servers.push(s);
   }
+  // Storage (Tavern Vault): only when it's turned on in Settings, and only on systems where Tavern Vault is connected.
+  // A system with storage but no servers still gets a section.
+  const storageOn = hasGlobal('storage.view') && !!state.vault?.enabled;
+  const hasStorage = (nk) => storageOn && vaultFor(nk)?.state === 'ok';
+  if (hasStorage('local') && !byNode.has('local')) byNode.set('local', { name: 'This System', servers: [] });
+  for (const n of state.vault?.nodes ?? []) if (hasStorage(n.id) && !byNode.has(n.id)) byNode.set(n.id, { name: n.name, servers: [] });
   const multi = byNode.size > 1 || (byNode.size === 1 && !byNode.has('local'));
   const nodesInOrder = [...byNode].sort((a, b) => (a[0] === 'local' ? -1 : b[0] === 'local' ? 1 : a[1].name.localeCompare(b[1].name)));
   for (const [nk, info] of nodesInOrder) {
@@ -324,8 +365,167 @@ function renderSidebar() {
       if (offline) head.appendChild(el('span', 'node-state', 'offline'));
       nav.appendChild(head);
     }
+    if (hasStorage(nk)) nav.appendChild(storageLink(nk, info.name));
     renderGameGroups(nav, info.servers, nk);
   }
+}
+
+// ---------- storage (Tavern Vault) ----------
+
+const STORAGE_STATE_TEXT = {
+  missing: 'Needs Tavern Vault',
+  off: 'Tavern Vault: node mode is off',
+  nokey: 'Tavern Vault is starting…',
+  down: 'Tavern Vault is not answering',
+  old: 'Update Tavern Host there (0.5.0+)',
+  unreachable: 'System not reachable',
+};
+const vaultFor = (nk) => (nk === 'local' ? state.vault?.local : state.vault?.nodes?.find((n) => n.id === nk));
+
+/** The "Storage" entry at the top of a system's section in the sidebar. */
+function storageLink(nk, systemName) {
+  const v = vaultFor(nk);
+  const lvl = v?.state === 'ok' ? v.level : 'none';
+  const a = el('a', `storage-link lvl-${lvl}${state.storage === nk ? ' active' : ''}`);
+  a.href = `#storage:${nk}`;
+  const icon = el('span', 'srv-icon side', '🗄');
+  icon.appendChild(el('span', 'dot'));
+  a.appendChild(icon);
+  const text = el('div');
+  text.appendChild(el('div', null, 'Storage'));
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const sub = !v ? 'Tavern Vault' : v.state === 'ok' ? `${plural(v.pools, 'pool')} · ${plural(v.arrays, 'array')}${v.problems ? ` · ${plural(v.problems, 'problem')}` : ''}${v.practice ? ' · practice' : ''}` : STORAGE_STATE_TEXT[v.state] ?? 'Tavern Vault';
+  text.appendChild(el('div', 'sub', sub));
+  a.appendChild(text);
+  a.title = `${systemName}: drive pools, SnapRAID and drive health (Tavern Vault)`;
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    showStorage(nk);
+  });
+  return a;
+}
+
+async function loadVaultSummary() {
+  if (!hasGlobal('storage.view') && !hasGlobal('panel.settings')) return;
+  try {
+    state.vault = await api('GET', '/api/vault/summary');
+    applyPanelName(state.vault.panel);
+    renderSidebar();
+    if (!$('settingsView').hidden) renderStorageSettings();
+  } catch {}
+}
+
+const STORAGE_DOT = { ok: '🟢', warn: '🟠', crit: '🔴' };
+
+/** Settings → Storage (Tavern Vault): the switch, and each system's state (with what's missing where it isn't ready). */
+function renderStorageSettings() {
+  const v = state.vault;
+  if (!v) return;
+  $('storageToggle').checked = !!v.enabled;
+  $('storageToggle').disabled = !hasGlobal('panel.settings');
+  const list = $('storageSystems');
+  list.innerHTML = '';
+  const row = (name, s) => {
+    const div = el('div', `storage-sys${s.state === 'ok' ? ' ok' : ' warn'}`);
+    div.appendChild(el('b', null, name));
+    div.appendChild(
+      el(
+        'span',
+        null,
+        s.state === 'ok'
+          ? `${STORAGE_DOT[s.level] ?? '🟢'} Tavern Vault connected · ${s.pools} pool${s.pools === 1 ? '' : 's'}, ${s.arrays} SnapRAID array${s.arrays === 1 ? '' : 's'}${s.problems ? ` · ${s.problems} problem${s.problems === 1 ? '' : 's'}` : ''}${v.enabled ? '' : ' (shows once Storage is on)'}`
+          : `⚠ ${s.message}`,
+      ),
+    );
+    list.appendChild(div);
+  };
+  if (v.local) row('This system', v.local);
+  for (const n of v.nodes ?? []) row(n.name, n);
+  if (v.enabled && !v.nodes?.length && v.local?.state !== 'ok') list.appendChild(el('p', 'muted small-text', 'Nothing to show in the list on the left yet: no system here has Tavern Vault connected.'));
+}
+
+$('storageToggle').addEventListener('change', async (e) => {
+  try {
+    await api('PUT', '/api/settings/storage', { enabled: e.target.checked });
+    toast(e.target.checked ? 'Storage on: systems with Tavern Vault show it in the list on the left.' : 'Storage off.');
+    if (!e.target.checked && state.storage) hideStorage();
+    await loadVaultSummary();
+  } catch (err) {
+    e.target.checked = !e.target.checked;
+    toast(err.message, true);
+  }
+});
+setInterval(() => !document.hidden && loadVaultSummary(), 30_000);
+// The name also changes when this system's own servers come or go.
+setInterval(() => !document.hidden && state.user && refreshPanelName(), 60_000);
+
+/** Shows a system's storage: Tavern Vault's own page in a frame, or what's needed to get it. */
+async function showStorage(nk) {
+  state.storage = nk;
+  state.selected = null;
+  history.replaceState(null, '', `#storage:${nk}`);
+  $('emptyState').hidden = true;
+  $('settingsView').hidden = true;
+  $('serverView').hidden = true;
+  $('storageView').hidden = false;
+  const name = nk === 'local' ? 'This System' : (state.vault?.nodes?.find((n) => n.id === nk)?.name ?? 'Node');
+  $('storageTitle').textContent = `Storage · ${name}`;
+  $('storageSub').textContent = 'Tavern Vault';
+  renderSidebar();
+  let v;
+  try {
+    v = await api('GET', nk === 'local' ? '/api/vault' : `/api/nodes/${encodeURIComponent(nk)}/vault`);
+  } catch (err) {
+    v = { state: 'unreachable', message: err.message };
+  }
+  if (state.storage !== nk) return;
+  const frame = $('storageFrame');
+  const need = $('storageNeed');
+  if (v.state === 'ok') {
+    need.hidden = true;
+    const src = `/vault-ui/${nk === 'local' ? 'local' : `n-${nk}`}/`;
+    if (frame.getAttribute('src') !== src) frame.src = src;
+    frame.hidden = false;
+    $('storageSub').textContent = `Tavern Vault ${v.status.version} on ${v.status.host}${v.status.practice ? ' · practice mode (changes are shown, not made)' : ''}`;
+    return;
+  }
+  frame.hidden = true;
+  frame.removeAttribute('src');
+  need.innerHTML = '';
+  need.hidden = false;
+  const title = v.state === 'missing' ? `Storage on ${name} needs Tavern Vault` : v.state === 'old' ? `${name} needs a newer Tavern Host` : v.state === 'unreachable' ? `Can't reach ${name}` : `Tavern Vault on ${name} isn't connected yet`;
+  need.appendChild(el('h3', null, title));
+  need.appendChild(el('p', null, v.message));
+  if (v.state === 'missing' || v.state === 'off') {
+    const ol = el('ol');
+    if (v.state === 'missing') ol.appendChild(el('li', null, `Install Tavern Vault on ${name} (the system that has the drives).`));
+    ol.appendChild(el('li', null, 'Open Tavern Vault → Settings → Node mode (show in Tavern Host) and turn it on.'));
+    ol.appendChild(el('li', null, 'Come back here: pools, drives and SnapRAID show up within a minute, with everything Tavern Vault can do.'));
+    need.appendChild(ol);
+    need.appendChild(
+      el(
+        'p',
+        'muted small-text',
+        nk === 'local'
+          ? 'Tavern Vault is a separate app; Tavern Host only shows it. Systems you manage as nodes are linked already (Settings → Nodes), so they need no extra code.'
+          : `${name} is already linked to this panel as a node, so no new code is needed: its storage comes through the same link.`,
+      ),
+    );
+  }
+}
+
+$('btnStorageReload').addEventListener('click', () => {
+  const nk = state.storage;
+  if (!nk) return;
+  $('storageFrame').removeAttribute('src');
+  loadVaultSummary();
+  showStorage(nk);
+});
+
+/** Leaves the storage view (when a server or settings opens). */
+function hideStorage() {
+  state.storage = null;
+  $('storageView').hidden = true;
 }
 
 /** "local" for this system's servers, the node id for servers on other systems. */
@@ -514,6 +714,7 @@ async function selectServer(id) {
   history.replaceState(null, '', `#${id}`);
   state.detail = await api('GET', `/api/servers/${id}`);
   state.list = null;
+  hideStorage();
   $('emptyState').hidden = true;
   $('settingsView').hidden = true;
   $('serverView').hidden = false;
@@ -3042,9 +3243,15 @@ $('btnCloseSettings').addEventListener('click', () => {
 });
 
 async function openSettings() {
+  hideStorage();
+  renderSidebar();
   $('serverView').hidden = true;
   $('emptyState').hidden = true;
   $('settingsView').hidden = false;
+  if (hasGlobal('storage.view') || hasGlobal('panel.settings')) {
+    renderStorageSettings();
+    loadVaultSummary();
+  }
   // Updating from a file runs the installer on this system: installed desktop app only (not the web page, not dev).
   const canRunInstallers = !!window.desktop?.pickInstaller && state.build !== 'development';
   $('btnUpdateFile').hidden = !canRunInstallers;
@@ -3118,7 +3325,8 @@ async function loadNodes() {
     row.appendChild(el('span', `node-dot${n.online ? '' : ' off'}`));
     const info = el('div', 'node-info');
     info.appendChild(el('b', null, n.name));
-    info.appendChild(el('div', 'muted small-text', `${n.host}:${n.port} · ${n.online ? `online · ${n.servers} server${n.servers === 1 ? '' : 's'}${n.version ? ` · v${n.version}` : ''}` : n.restarting ? 'restarting (update)…' : `offline${n.error ? `: ${n.error}` : ''}`}`));
+    const what = n.kind === 'vault' ? `Tavern Vault only (storage)${n.version ? ` · Tavern Vault v${n.version}` : ''}` : `${n.servers} server${n.servers === 1 ? '' : 's'}${n.version ? ` · v${n.version}` : ''}`;
+    info.appendChild(el('div', 'muted small-text', `${n.host}:${n.port} · ${n.online ? `online · ${what}` : n.restarting ? 'restarting (update)…' : `offline${n.error ? `: ${n.error}` : ''}`}`));
     row.appendChild(info);
     const rename = el('button', 'small ghost', 'Rename');
     rename.addEventListener('click', async () => {
@@ -3131,6 +3339,7 @@ async function loadNodes() {
     remove.addEventListener('click', async () => {
       if (!confirm(`Remove "${n.name}"? Its servers disappear from this panel (they keep running on that system). You can add it again with a new code.`)) return;
       await api('DELETE', `/api/nodes/${n.id}`).catch((err) => toast(err.message, true));
+      refreshPanelName();
       loadNodes();
     });
     row.append(rename, remove);
@@ -3145,6 +3354,7 @@ $('btnAddNode').addEventListener('click', async () => {
     await api('POST', '/api/nodes', { code });
     $('nodeCode').value = '';
     toast('Node added. Its servers appear in the list on the left.');
+    refreshPanelName();
     loadNodes();
   } catch (err) {
     toast(err.message, true);
@@ -4175,6 +4385,15 @@ $('keyShowClose').addEventListener('click', () => {
 // ---------- API reference (Settings) ----------
 // [method, path, what it does, permission label]. Keep in step with the routes in src/main.ts.
 const API_DOCS = [
+  ['Storage (Tavern Vault)', [
+    ['GET', '/api/vault', 'Storage on this system: {"state":"ok","status":{pools, disks, arrays, jobs, problems…}} or why it isn\'t available ("missing" = Tavern Vault not installed, "off" = its node mode is off, "nokey"/"down" = its service isn\'t reachable)', 'See storage'],
+    ['GET', '/api/vault/summary', 'Storage at a glance for this system and every node', 'See storage'],
+    ['POST', '/api/vault/call', 'Run a Tavern Vault call: {"method","args"} → {"ok","data"|"error"}. Reading (state, inventory, arrays, schedules, activity, scrubInfo, discoverArrays, validateArray, snapraidRunning) needs See storage; everything else (createPool, createVolume, addDisks, retireDisk, removeDisk, repairVolume, resizeVolume, attachPool, rename, deleteVolume, deletePool, eraseDisk, saveArray, snapraidRun, createSchedule…) needs Manage storage. Tavern Vault\'s practice mode and safety checks apply.', 'See / Manage storage'],
+    ['GET', '/api/vault/events?since=', 'SnapRAID output and finish events after sequence number since', 'See storage'],
+    ['GET', '/api/nodes/{node}/vault', 'The same, for a node (through its node link; the node needs Tavern Host 0.5.0+ and Tavern Vault in node mode)', 'See storage'],
+    ['POST', '/api/nodes/{node}/vault/call', 'Run a Tavern Vault call on a node', 'See / Manage storage'],
+    ['GET', '/api/nodes/{node}/vault/events?since=', 'SnapRAID output on a node', 'See storage'],
+  ]],
   ['General', [
     ['GET', '/api/me', 'Who you are, and your panel-wide permissions', 'Any key or login'],
     ['GET', '/api/games', 'Supported games and their settings fields', 'Any key or login'],
@@ -4325,7 +4544,7 @@ const API_DOCS = [
     ['POST', '/api/nodes', 'Add a node: {"code":"thnode://…","name"?}', 'Panel settings'],
     ['PUT', '/api/nodes/{node}', 'Rename a node: {"name"}', 'Panel settings'],
     ['DELETE', '/api/nodes/{node}', 'Remove a node (its servers keep running there)', 'Panel settings'],
-    ['POST', '/api/node-code', 'Make a code so another panel can manage this system: {"label"?} (on this system only; needs Remote access on)', 'Panel settings'],
+    ['POST', '/api/node-code', 'Make a code so another panel can manage this system (servers, and storage if Tavern Vault is in node mode): {"label"?} (on this system only; needs Remote access on)', 'Panel settings'],
     ['GET', '/api/files?path=', 'Browse any folder on this system', 'Browse all files on this system'],
     ['POST', '/api/files/mkdir', 'New folder: {"parent","name"}', 'Browse all files on this system'],
     ['POST', '/api/files/rename', 'Rename: {"path","name"} (not folders a running server uses)', 'Browse all files on this system'],

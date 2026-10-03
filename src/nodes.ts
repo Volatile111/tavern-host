@@ -21,6 +21,8 @@ export interface NodeRecord {
   /** SHA-256 of the node's certificate, hex, upper case, no colons. */
   fingerprint: string;
   addedAt: number;
+  /** "vault": a system with only Tavern Vault (no Tavern Host), linked by Tavern Vault's own code. Storage only. */
+  kind?: 'host' | 'vault';
 }
 
 interface NodeState {
@@ -64,7 +66,7 @@ export function getNode(id: string): NodeRecord {
 export function listNodes() {
   return nodes.map((n) => {
     const s = state(n.id);
-    return { id: n.id, name: n.name, host: n.host, port: n.port, addedAt: n.addedAt, online: s.online, error: s.error, version: s.version, restarting: s.restarting, servers: s.servers.size };
+    return { id: n.id, name: n.name, kind: n.kind ?? 'host', host: n.host, port: n.port, addedAt: n.addedAt, online: s.online, error: s.error, version: s.version, restarting: s.restarting, servers: s.servers.size };
   });
 }
 
@@ -123,24 +125,30 @@ export async function nodeJson<T = unknown>(node: NodeRecord, method: string, pa
 
 // ---------- adding / removing ----------
 
-/** thnode://host:port/<key>?fp=<sha256>&name=<name> */
+/**
+ * thnode://host:port/<th_key>?fp=<sha256>&name=<name> (Tavern Host), or thvault://host:port/<tv_key>?fp=…&name=…
+ * (Tavern Vault on a system without Tavern Host: storage only).
+ */
 export function parseNodeCode(code: string) {
-  const m = /^thnode:\/\/([^/:\s]+):(\d+)\/(th_[0-9a-f]+)\?(.+)$/i.exec(String(code ?? '').trim());
-  if (!m) throw new Error('That isn\'t a node code. On the other system open Settings -> "Use this system as a node" and copy the code (it starts with thnode://).');
-  const q = new URLSearchParams(m[4]);
+  const m = /^(thnode|thvault):\/\/([^/:\s]+):(\d+)\/((?:th|tv)_[0-9a-f]+)\?(.+)$/i.exec(String(code ?? '').trim());
+  if (!m) throw new Error('That isn\'t a node code. On the other system open Tavern Host → Settings → "Use this system as a node" (or, on a system with only Tavern Vault, Tavern Vault → Settings → Node mode) and copy the code (it starts with thnode:// or thvault://).');
+  const kind = m[1].toLowerCase() === 'thvault' ? 'vault' : 'host';
+  if ((kind === 'vault') !== m[4].startsWith('tv_')) throw new Error("That code doesn't look right. Copy it again from the other system.");
+  const q = new URLSearchParams(m[5]);
   const fp = String(q.get('fp') ?? '').replace(/:/g, '').toUpperCase();
   if (!/^[0-9A-F]{64}$/.test(fp)) throw new Error('The code is missing the certificate fingerprint.');
-  return { host: m[1], port: Number(m[2]), key: m[3], fingerprint: fp, name: q.get('name') ?? m[1] };
+  return { kind: kind as 'host' | 'vault', host: m[2], port: Number(m[3]), key: m[4], fingerprint: fp, name: q.get('name') ?? m[2] };
 }
 
 export async function addNode(code: string, name?: string) {
   const c = parseNodeCode(code);
   if (nodes.some((n) => n.host === c.host && n.port === c.port)) throw new Error('That system is already a node here.');
   const probe = { ...c, id: '', addedAt: 0 };
-  // Check it answers, the key works and it's a Tavern Host new enough to be a node.
-  const me = await nodeJson<{ version?: string; global?: unknown }>(probe as NodeRecord, 'GET', '/api/me');
-  if (!Array.isArray(me?.global)) throw new Error('That system runs a Tavern Host too old to be a node. Update it first.');
-  const node: NodeRecord = { id: randomBytes(3).toString('hex'), name: String(name ?? '').trim().slice(0, 40) || c.name, host: c.host, port: c.port, key: c.key, fingerprint: c.fingerprint, addedAt: Date.now() };
+  // Check it answers, the key works and it's a Tavern Host new enough to be a node (or a Tavern Vault).
+  const me = await nodeJson<{ version?: string; global?: unknown; app?: string }>(probe as NodeRecord, 'GET', '/api/me');
+  if (c.kind === 'vault' && me?.app !== 'Tavern Vault') throw new Error("That system didn't answer as Tavern Vault. Make a fresh code in Tavern Vault there.");
+  if (c.kind === 'host' && !Array.isArray(me?.global)) throw new Error('That system runs a Tavern Host too old to be a node. Update it first.');
+  const node: NodeRecord = { id: randomBytes(3).toString('hex'), name: String(name ?? '').trim().slice(0, 40) || c.name, host: c.host, port: c.port, key: c.key, fingerprint: c.fingerprint, addedAt: Date.now(), kind: c.kind };
   nodes.push(node);
   writeJson(FILE, nodes);
   connect(node);
@@ -240,7 +248,28 @@ const STREAM_SILENCE_MS = 70_000;
 // While connected, the full server list is fetched again this often too, in case an event was missed anyway.
 const REFRESH_MS = 2 * 60_000;
 
+/** A Tavern Vault-only node has no servers or live stream: it's checked every 30 s to know if it's up. */
+function connectVault(node: NodeRecord) {
+  const s = state(node.id);
+  if (s.retry) clearTimeout(s.retry);
+  (async () => {
+    const was = s.online;
+    try {
+      const me = await nodeJson<{ version?: string }>(node, 'GET', '/api/me');
+      s.online = true;
+      s.error = null;
+      s.version = me?.version ?? null;
+    } catch (err) {
+      s.online = false;
+      s.error = (err as Error).message;
+    }
+    if (was !== s.online) events.emit('nodes');
+    if (nodes.some((n) => n.id === node.id)) s.retry = setTimeout(() => connectVault(node), 30_000);
+  })();
+}
+
 function connect(node: NodeRecord) {
+  if (node.kind === 'vault') return connectVault(node);
   const s = state(node.id);
   if (s.retry) clearTimeout(s.retry);
   let watchdog: NodeJS.Timeout | null = null;

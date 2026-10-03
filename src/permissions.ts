@@ -26,7 +26,7 @@ export const SERVER_PERMS = [
 ] as const;
 export type ServerPerm = (typeof SERVER_PERMS)[number];
 
-export const GLOBAL_PERMS = ['servers.create', 'files.browse', 'users.manage', 'panel.settings', 'audit.view'] as const;
+export const GLOBAL_PERMS = ['servers.create', 'files.browse', 'users.manage', 'panel.settings', 'audit.view', 'storage.view', 'storage.manage'] as const;
 export type GlobalPerm = (typeof GLOBAL_PERMS)[number];
 
 export interface PermInfo {
@@ -102,6 +102,8 @@ export const GLOBAL_PERM_INFO: Record<GlobalPerm, PermInfo> = {
   'users.manage': { label: 'Manage users & API keys', help: 'Add, change and remove users and API keys (never more than they have themselves).', danger: true },
   'panel.settings': { label: 'Panel settings', help: 'Remote access, firewall, integrations (CurseForge and Nexus Mods keys), backup copies and nodes (other systems).' },
   'audit.view': { label: 'View activity log', help: 'See who did what in Tavern Host.' },
+  'storage.view': { label: 'See storage (Tavern Vault)', help: "See each system's drives, pools, SnapRAID arrays and schedules. Needs Tavern Vault in node mode on that system." },
+  'storage.manage': { label: 'Manage storage (Tavern Vault)', help: 'Everything Tavern Vault can do: create, grow, repair and delete pools and volumes, erase drives, run SnapRAID, change schedules. Can destroy data.', danger: true },
 };
 
 export const SERVER_PERM_INFO: Record<ServerPerm, PermInfo> = Object.fromEntries(SERVER_PERM_GROUPS.flatMap((g) => g.perms)) as Record<ServerPerm, PermInfo>;
@@ -118,7 +120,7 @@ const ALL_SERVER: ServerPerm[] = [...SERVER_PERMS];
 const MODERATOR: ServerPerm[] = ['view', 'console.view', 'console.command', 'control.start', 'control.stop', 'control.restart', 'access.edit', 'backups.create', 'tasks.run', 'files.view'];
 
 export const PRESETS: Record<Exclude<Preset, 'custom'>, Grants> = {
-  admin: { global: ['servers.create', 'files.browse', 'users.manage', 'panel.settings', 'audit.view'], servers: { '*': ALL_SERVER } },
+  admin: { global: ['servers.create', 'files.browse', 'users.manage', 'panel.settings', 'audit.view', 'storage.view', 'storage.manage'], servers: { '*': ALL_SERVER } },
   // "operator" is the id from before the rework; it's shown as "Moderator".
   operator: { global: [], servers: { '*': MODERATOR } },
   viewer: { global: [], servers: { '*': ['view'] } },
