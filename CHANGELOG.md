@@ -1,5 +1,28 @@
 # Changelog
 
+## Tavern Host 0.5.1
+
+**New**
+- **Storage is now a switch**: Settings → Storage (Tavern Vault), off until you turn it on. It covers showing storage here and sharing this system's storage with a main panel. The "needs Tavern Vault" notes live there too, with each system's state (this system and every node).
+- A system gets a **Storage** entry in the list on the left only when Tavern Vault is actually connected there. A main panel without Tavern Vault of its own no longer shows Storage for itself.
+- **Systems with only Tavern Vault** (no Tavern Host) can be added as nodes: Tavern Vault makes its own code (thvault://…) in its Settings → Node mode; paste it into Settings → Nodes as usual. They show with their Storage. Needs Tavern Vault 0.2.0 or newer there.
+- **The panel's name follows what it does**:
+  - **Tavern Master**: manages other systems (nodes) and has no game servers or Tavern Vault of its own.
+  - **Tavern Super**: manages other systems and has its own game servers or Tavern Vault too.
+  - **Tavern Node**: another panel uses this system as a node (its node code has been used).
+  - **Tavern Super Node**: a node with Tavern Vault on it.
+  - **Tavern Host**: none of the above.
+  The name shows in the header, the window title and the login screen, and changes by itself.
+
+## Tavern Host 0.5.0
+
+**New**
+- **Storage, with Tavern Vault.** Each system in the list on the left now has a **Storage** entry: its drive pools (Storage Spaces), SnapRAID arrays, drive health and schedules, with everything Tavern Vault can do (create, grow and repair pools, replace drives, run SnapRAID…). This needs **Tavern Vault**, a separate app, on the system that has the drives, with its Node mode turned on. Without it, Storage explains what to install.
+- Storage works for nodes too, through the same node link: a node's storage shows under it on the main panel. The main panel doesn't need Tavern Vault itself. Nodes need Tavern Host 0.5.0 or newer.
+- New permissions: **See storage** and **Manage storage** (Manage can destroy data; it's marked as dangerous). Admins get both. Node links made before 0.5.0 get them automatically, once (noted in the activity log).
+- Settings has a new **Storage (Tavern Vault)** section showing whether Tavern Vault is connected on this system.
+- Storage changes made through Tavern Host show in Tavern Vault's activity log with who made them, and in Tavern Host's activity log. Tavern Vault's practice mode and safety checks apply exactly as in its own window.
+
 ## Tavern Host 0.4.3
 
 **New**

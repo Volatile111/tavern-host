@@ -1,7 +1,7 @@
 // Accounts, password hashing, login sessions and API keys.
 import { randomBytes, scryptSync, timingSafeEqual, randomUUID, createHash } from 'node:crypto';
 import { readJson, writeJson } from './store.ts';
-import { grantsFor, normalizeGrants, assertCanGrant, type Grants, type Preset, type Principal } from './permissions.ts';
+import { grantsFor, normalizeGrants, assertCanGrant, type Grants, type GlobalPerm, type Preset, type Principal } from './permissions.ts';
 
 export type Role = 'owner' | Preset;
 
@@ -383,6 +383,28 @@ export function deleteApiKey(id: string, by: Principal | null = null): void {
   if (!k) throw new Error('API key not found.');
   if (by && !by.owner) assertCanGrant(by, k.grants);
   writeJson(KEYS_FILE, keys.filter((x) => x.id !== id));
+}
+
+/**
+ * 0.5.0: node links (the keys "Use this system as a node" makes) also carry storage, so a master panel can show and
+ * manage Tavern Vault on its nodes. Links made before 0.5.0 get the storage permissions once; returns how many changed.
+ */
+export function upgradeNodeLinkKeys(): number {
+  const keys = loadKeys();
+  let changed = 0;
+  for (const k of keys) {
+    if (k.preset !== 'custom' || !/^Node link/.test(k.name)) continue;
+    const before = k.grants.global.length;
+    k.grants.global = [...new Set([...k.grants.global, 'storage.view', 'storage.manage'] as GlobalPerm[])];
+    if (k.grants.global.length !== before) changed++;
+  }
+  if (changed) writeJson(KEYS_FILE, keys);
+  return changed;
+}
+
+/** This system is someone's node: a node link key ("Use this system as a node") exists and a main panel has used it. */
+export function usedAsNode(): boolean {
+  return loadKeys().some((k) => /^Node link/.test(k.name) && !!k.lastUsed && (!k.expiresAt || k.expiresAt > Date.now()));
 }
 
 let lastUsedSaved = 0;

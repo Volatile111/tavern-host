@@ -50,17 +50,20 @@ import { portHelp } from './port-help.ts';
 import { difficultyInfo, setDifficulty } from './difficulty.ts';
 import { supportsWorlds, listWorlds, setActiveWorld, exportWorld, importWorld, deleteWorld } from './worlds.ts';
 import { listAlerts, dismissAlert, startHealthChecks, type Alert } from './health.ts';
+import { vaultState, vaultCall, vaultEvents, vaultUiFile, vaultShim, vaultPage, VIEW_METHODS, UI_FILES as VAULT_UI } from './vault.ts';
 import { worldCheckInfo, checkNow, acceptCurrent, startWorldChecks } from './world-check.ts';
 import { GAMES, events, loadInstances, listInstances, getInstance, createServer, createNewServer, updateServer, deleteServer, reorderServers } from './instances.ts';
 
 interface PanelConfig {
   port: number;
   remote: RemoteConfig;
+  /** Storage (Tavern Vault): off until turned on in Settings. Covers showing it here and sharing it with a main panel. */
+  storage: { enabled: boolean };
 }
 
 // The local listener is always on and only reachable from this system. Remote access adds an HTTPS listener.
 const saved = readJson<Partial<PanelConfig>>('config.json', {});
-const config: PanelConfig = { port: saved.port ?? 8190, remote: { enabled: false, port: 8191, ...saved.remote } };
+const config: PanelConfig = { port: saved.port ?? 8190, remote: { enabled: false, port: 8191, ...saved.remote }, storage: { enabled: false, ...saved.storage } };
 writeJson('config.json', config);
 
 const publicDir = path.join(rootDir, 'public');
@@ -258,8 +261,28 @@ const updatedFrom: { from: string | null; at: number } | null = (() => {
   return seen.updatedFrom ?? null;
 })();
 
+/**
+ * What this panel is, for its name:
+ * - manages nodes, nothing of its own (no game servers, no Tavern Vault connected here): "Tavern Master"
+ * - manages nodes and has its own servers or storage too: "Tavern Super"
+ * - is a node of another panel (its node link has been used): "Tavern Node", or "Tavern Super Node" with Tavern Vault here
+ * - otherwise: "Tavern Host"
+ * Managing nodes wins if a panel is both. Whether Tavern Vault is connected here is checked at most once a minute.
+ */
+type PanelRole = 'host' | 'master' | 'super' | 'node' | 'supernode';
+const PANEL_NAMES: Record<PanelRole, string> = { host: 'Tavern Host', master: 'Tavern Master', super: 'Tavern Super', node: 'Tavern Node', supernode: 'Tavern Super Node' };
+let ownVault = { at: 0, ok: false };
+async function panelIdentity(): Promise<{ role: PanelRole; name: string }> {
+  if (Date.now() - ownVault.at > 60_000) ownVault = { at: Date.now(), ok: (await vaultState().catch(() => ({ state: 'down' }))).state === 'ok' };
+  let role: PanelRole = 'host';
+  if (listNodes().length) role = listInstances().length || ownVault.ok ? 'super' : 'master';
+  else if (auth.usedAsNode()) role = ownVault.ok ? 'supernode' : 'node';
+  return { role, name: PANEL_NAMES[role] };
+}
+
 route('GET', '/api/me', async ({ user, principal, remote }) => ({
   version: PANEL_VERSION,
+  panel: await panelIdentity(),
   updatedFrom,
   // "development" = running from the sources (test panel); "release" = an installed or portable build.
   build: isDev ? 'development' : 'release',
@@ -569,12 +592,173 @@ route('POST', '/api/node-code', async (ctx) => {
   const fingerprint = await certFingerprint();
   if (!fingerprint) throw new HttpError(409, "Remote access hasn't made its certificate yet. Try again in a moment.");
   const { label } = await readBody(ctx.req);
-  const { key } = auth.createApiKey(`Node link${label ? ` (${String(label).slice(0, 30)})` : ''}`, 'custom', { global: ['servers.create'], servers: { '*': [...SERVER_PERMS] } }, [], p);
+  const { key } = auth.createApiKey(`Node link${label ? ` (${String(label).slice(0, 30)})` : ''}`, 'custom', { global: ['servers.create', 'storage.view', 'storage.manage'], servers: { '*': [...SERVER_PERMS] } }, [], p);
   const address = status.addresses.find((a) => a.includes('192.168.')) ?? status.addresses[0] ?? `https://${os.hostname()}:${config.remote.port}`;
   const hostPort = address.replace(/^https:\/\//, '');
   audit(p, 'made a node code for this system');
   return { code: `thnode://${hostPort}/${key}?fp=${fingerprint.replace(/:/g, '')}&name=${encodeURIComponent(os.hostname())}` };
 });
+
+// ---------- storage (Tavern Vault, on this system and on nodes) ----------
+// Tavern Vault is a separate app; with its node mode on, these pass requests to it. Storage is off until it's turned on
+// in Settings (on this panel to show it, on a node to share that node's storage). Reading needs storage.view, any change
+// storage.manage (checked here, by method). Nodes are reached through their node link.
+
+const STORAGE_OFF_HERE = 'Storage is turned off in Tavern Host on this system. Turn it on in Settings → Storage (Tavern Vault).';
+
+function needStorageOn() {
+  if (!config.storage.enabled) throw new HttpError(409, STORAGE_OFF_HERE);
+}
+
+/** This system's storage, honouring the Storage switch. */
+async function localVault() {
+  return config.storage.enabled ? vaultState() : { state: 'disabled', message: STORAGE_OFF_HERE };
+}
+
+function needStorage(ctx: Ctx, method?: string): Principal {
+  const p = need(ctx);
+  const right: GlobalPerm = method && !VIEW_METHODS.has(method) ? 'storage.manage' : 'storage.view';
+  if (!canGlobal(p, right)) throw new HttpError(403, right === 'storage.manage' ? 'You can see storage but not change it (needs "Manage storage").' : 'You do not have permission to see storage.');
+  return p;
+}
+
+/** Who asked, for Tavern Vault's activity log. A master panel passes its own "who" through the node link. */
+function vaultVia(p: Principal, body: { via?: unknown }): string {
+  if (p.kind === 'apikey' && typeof body.via === 'string' && body.via) return `${body.via}`.slice(0, 80);
+  return `Tavern Host · ${p.name}`.slice(0, 80);
+}
+
+route('GET', '/api/vault', async (ctx) => {
+  needStorage(ctx);
+  return localVault();
+});
+route('POST', '/api/vault/call', async (ctx) => {
+  const body = await readBody(ctx.req);
+  const method = String(body.method ?? '');
+  const p = needStorage(ctx, method);
+  needStorageOn();
+  const r = await vaultCall(method, body.args ?? {}, vaultVia(p, body));
+  if (!VIEW_METHODS.has(method) && r.ok && !(r.data as { practice?: boolean })?.practice) audit(p, `storage: ${method}`);
+  return r;
+});
+route('GET', '/api/vault/events', async (ctx) => {
+  needStorage(ctx);
+  needStorageOn();
+  return vaultEvents(Number(new URL(ctx.req.url ?? '/', 'http://x').searchParams.get('since')));
+});
+route('GET', '/api/vault/ui/:file', async (ctx) => {
+  needStorage(ctx);
+  needStorageOn();
+  const file = ctx.params[0];
+  const text = await vaultUiFile(file);
+  ctx.res.writeHead(200, { 'Content-Type': VAULT_UI[file], 'Cache-Control': 'no-store' });
+  ctx.res.end(text);
+  return undefined;
+});
+
+// Nodes: the same, through the node link. A node older than 0.5.0 answers 404.
+const tooOld = (err: { status?: number }) => err.status === 404;
+const OLD_NODE = 'That system runs a Tavern Host older than 0.5.0. Update Tavern Host there to see its storage.';
+
+async function nodeVault<T>(id: string, method: string, path: string, body?: unknown): Promise<T> {
+  needStorageOn();
+  try {
+    return await nodeJson<T>(getNode(id), method, path, body);
+  } catch (err) {
+    if (tooOld(err as { status?: number })) throw new HttpError(409, OLD_NODE);
+    throw err;
+  }
+}
+
+/** A node's storage state, as this panel describes it (messages name the node instead of "this system"). */
+async function nodeVaultState(n: { id: string; name: string; online?: boolean; error?: string | null }): Promise<Record<string, any>> {
+  if (n.online === false) return { state: 'unreachable', message: `${n.name} is offline${n.error ? ` (${n.error})` : ''}.` };
+  try {
+    const v = await nodeJson<Record<string, any>>(getNode(n.id), 'GET', '/api/vault');
+    if (v.state === 'disabled') return { state: 'disabled', message: `Storage is turned off in Tavern Host on ${n.name}. Turn it on there in Settings → Storage (Tavern Vault).` };
+    if (v.state === 'missing') return { state: 'missing', message: `Tavern Vault isn't installed on ${n.name}. Install it there and turn on its Node mode.` };
+    if (v.state === 'off') return { state: 'off', message: `Tavern Vault is installed on ${n.name}, but its Node mode is off (Tavern Vault → Settings → Node mode).` };
+    return v;
+  } catch (err) {
+    return tooOld(err as { status?: number }) ? { state: 'old', message: `${n.name} runs a Tavern Host older than 0.5.0. Update Tavern Host there.` } : { state: 'unreachable', message: (err as Error).message };
+  }
+}
+
+route('GET', '/api/nodes/:id/vault', async (ctx) => {
+  needStorage(ctx);
+  needStorageOn();
+  const n = getNode(ctx.params[0]);
+  return nodeVaultState({ ...n, ...listNodes().find((x) => x.id === n.id) });
+});
+route('POST', '/api/nodes/:id/vault/call', async (ctx) => {
+  const body = await readBody(ctx.req);
+  const method = String(body.method ?? '');
+  const p = needStorage(ctx, method);
+  const node = getNode(ctx.params[0]);
+  const r = await nodeVault<{ ok: boolean; data?: unknown }>(node.id, 'POST', '/api/vault/call', { method, args: body.args ?? {}, via: `${os.hostname()} (master) · ${p.name}` });
+  if (!VIEW_METHODS.has(method) && r.ok && !(r.data as { practice?: boolean })?.practice) audit(p, `storage on ${node.name}: ${method}`);
+  return r;
+});
+route('GET', '/api/nodes/:id/vault/events', async (ctx) => {
+  needStorage(ctx);
+  const since = Number(new URL(ctx.req.url ?? '/', 'http://x').searchParams.get('since')) || 0;
+  return nodeVault(ctx.params[0], 'GET', `/api/vault/events?since=${since}`);
+});
+
+/** Storage at a glance for the sidebar: this system and every node (nodes asked at most every 30 s). */
+const nodeVaultCache = new Map<string, { at: number; value: Record<string, unknown> }>();
+function brief(v: Record<string, any>) {
+  if (v.state !== 'ok') return { state: v.state, message: v.message };
+  const s = v.status ?? {};
+  return { state: 'ok', level: s.level ?? 'ok', problems: (s.problems ?? []).length, pools: (s.pools ?? []).length, arrays: (s.arrays ?? []).length, practice: !!s.practice, at: s.at };
+}
+/**
+ * Storage on this system and every node, for the sidebar (only systems with state "ok" get a Storage entry) and for
+ * Settings (which explains the rest). With Storage off, only this system is checked, so Settings can say what's needed.
+ */
+route('GET', '/api/vault/summary', async (ctx) => {
+  const p = need(ctx);
+  if (!canGlobal(p, 'storage.view') && !canGlobal(p, 'panel.settings')) throw new HttpError(403, 'You do not have permission to see storage.');
+  const enabled = config.storage.enabled;
+  const local = brief(await vaultState());
+  ownVault = { at: Date.now(), ok: local.state === 'ok' };
+  const panel = await panelIdentity();
+  if (!enabled) return { enabled, local, nodes: [], panel };
+  const nodes = await Promise.all(
+    listNodes().map(async (n) => {
+      const cached = nodeVaultCache.get(n.id);
+      if (cached && Date.now() - cached.at < 30_000) return { id: n.id, name: n.name, ...cached.value };
+      const value = brief(await nodeVaultState(n));
+      nodeVaultCache.set(n.id, { at: Date.now(), value });
+      return { id: n.id, name: n.name, ...value };
+    }),
+  );
+  return { enabled, local, nodes, panel };
+});
+
+// The Storage switch (Settings → Storage (Tavern Vault)).
+route('PUT', '/api/settings/storage', async (ctx) => {
+  const p = needGlobal(ctx, 'panel.settings');
+  const { enabled } = await readBody(ctx.req);
+  config.storage.enabled = !!enabled;
+  writeJson('config.json', config);
+  nodeVaultCache.clear();
+  audit(p, `turned storage (Tavern Vault) ${config.storage.enabled ? 'on' : 'off'}`);
+  return { enabled: config.storage.enabled };
+});
+
+/** Tavern Vault's page files for /vault-ui/<scope>/, from this system's Tavern Vault or a node's. */
+async function vaultUiFor(scope: string, file: string): Promise<string> {
+  needStorageOn();
+  if (scope === 'local') return vaultUiFile(file);
+  const id = /^n-([a-z0-9]+)$/i.exec(scope)?.[1];
+  if (!id) throw new HttpError(404, 'Not found.');
+  const res = await nodeRequest(getNode(id), 'GET', `/api/vault/ui/${file}`);
+  const chunks: Buffer[] = [];
+  for await (const c of res) chunks.push(c as Buffer);
+  if ((res.statusCode ?? 500) >= 400) throw new HttpError(res.statusCode === 404 ? 409 : 502, res.statusCode === 404 ? OLD_NODE : `The node answered ${res.statusCode}.`);
+  return Buffer.concat(chunks).toString('utf-8');
+}
 
 // ---------- difficulty (every server type) ----------
 
@@ -2345,6 +2529,33 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse, remot
       throw new HttpError(404, 'Not found.');
     }
 
+    // Tavern Vault's own page, shown inside the Storage view (an iframe): /vault-ui/local/ or /vault-ui/n-<node>/.
+    // Signed-in users with "See storage" only. These pages may be framed by this panel and use inline styles.
+    const vaultUi = /^\/vault-ui\/(local|n-[a-z0-9]+)\/([\w.-]*)$/i.exec(url.pathname);
+    if (vaultUi) {
+      let user = auth.sessionUser(cookies(req)[COOKIE]);
+      if (user && remote && !user.remote) user = null;
+      const p = user && !user.mustChangePassword ? auth.userPrincipal(user) : null;
+      if (!p || !canGlobal(p, 'storage.view')) throw new HttpError(403, 'Sign in with "See storage" permission to view this.');
+      const [, scope, file = ''] = vaultUi;
+      const name = file || 'index.html';
+      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+      res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'self'");
+      let body: string;
+      let type: string;
+      if (name === 'shim.js') {
+        body = vaultShim(scope === 'local' ? '/api/vault' : `/api/nodes/${scope.slice(2)}/vault`);
+        type = 'text/javascript';
+      } else if (VAULT_UI[name]) {
+        body = await vaultUiFor(scope, name);
+        if (name === 'index.html') body = vaultPage(body);
+        type = VAULT_UI[name];
+      } else throw new HttpError(404, 'Not found.');
+      res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' });
+      res.end(body);
+      return;
+    }
+
     // UI test designs (development panel only): /launcher/ and /dashboard/ serve the normal page with that design's
     // stylesheet and script added (ui-tests/<name>/), so they always run the current panel code. Not in builds.
     const uiTest = isDev ? /^\/(launcher|dashboard)(\/.*)?$/.exec(url.pathname) : null;
@@ -2400,6 +2611,11 @@ for (const inst of listInstances()) {
   try {
     if (ensureDefaultProfile(inst.record)) inst.log('Profiles: made "Main" from how this server is set up now (world and mods). Add more in Settings → Profiles.');
   } catch {}
+}
+// 0.5.0: node links made before storage existed get "See / Manage storage", so the master panel can reach Tavern Vault.
+{
+  const upgraded = auth.upgradeNodeLinkKeys();
+  if (upgraded) logActivity({ at: Date.now(), who: 'Tavern Host', kind: 'user', id: 'system', what: `gave ${upgraded} node link key(s) the new storage permissions (Tavern Vault on this system)` });
 }
 startHealthChecks();
 startWorldChecks();

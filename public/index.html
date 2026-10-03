@@ -88,6 +88,16 @@
         <p class="muted">Add a server to get started, or pick one from the list.</p>
       </div>
 
+      <div id="storageView" hidden>
+        <div class="storage-head">
+          <div><h2 id="storageTitle" class="server-title">Storage</h2><div class="muted small-text" id="storageSub">Tavern Vault</div></div>
+          <span class="spacer"></span>
+          <button class="small" id="btnStorageReload">Reload</button>
+        </div>
+        <div id="storageNeed" class="card storage-need" hidden></div>
+        <iframe id="storageFrame" class="storage-frame" title="Tavern Vault" hidden></iframe>
+      </div>
+
       <div id="serverView" hidden>
         <div class="server-head">
           <span id="svIcon"></span>
@@ -603,18 +613,28 @@
         <section class="card" data-global="panel.settings">
           <h3>Nodes (other systems) <span class="count" id="nodeCount"></span></h3>
           <p class="muted">Manage servers on other systems from this panel. On the other system, open Tavern Host → Settings → <b>Use this system as a node</b>, copy the code, and paste it here.
-            Their servers then show in the list on the left, grouped by system.</p>
+            Their servers then show in the list on the left, grouped by system. If that system also runs Tavern Vault in node mode, its <b>Storage</b> shows there too (no extra code needed).
+            A system with only Tavern Vault (no Tavern Host) can be added too: Tavern Vault → Settings → Node mode makes its own code (thvault://…) to paste here.</p>
           <div id="nodeList" class="node-list"></div>
           <div class="with-button">
-            <input id="nodeCode" placeholder="thnode://192.168.1.50:8191/th_…" spellcheck="false" autocomplete="off">
+            <input id="nodeCode" placeholder="thnode://192.168.1.50:8191/th_…  or  thvault://…" spellcheck="false" autocomplete="off">
             <button class="primary" id="btnAddNode">Add node</button>
           </div>
+        </section>
+
+        <section class="card" data-global="storage.view|panel.settings" id="storageCard">
+          <h3>Storage (Tavern Vault)</h3>
+          <label class="toggle"><input type="checkbox" id="storageToggle"> Show storage (drive pools, SnapRAID, drive health) in Tavern Host</label>
+          <p class="muted"><b>This needs Tavern Vault</b>, a separate app, on each system that has the drives, with its <b>Node mode</b> turned on (Tavern Vault → Settings → Node mode).
+            A system gets a <b>Storage</b> entry in the list on the left only when Tavern Vault is connected there; systems without it show nothing.</p>
+          <p class="muted">Turn this on here to see storage, and also in Tavern Host on each node whose storage you want to see from here. Nodes need no new code: storage comes through the same node link as their servers (Nodes, above). Tavern Vault doesn't need to be on this panel's own system.</p>
+          <div id="storageSystems" class="storage-systems"></div>
         </section>
 
         <section class="card" data-global="panel.settings" id="nodeCodeCard">
           <h3>Use this system as a node</h3>
           <p class="muted">Lets a Tavern Host on another system (e.g. your main system) manage this system's servers. Needs Remote access on (above).
-            The code holds a key that can run this system's servers (but not manage users or settings): treat it like a password, and don't paste it into chats.</p>
+            The code holds a key that can run this system's servers and, if Tavern Vault is in node mode here, see and manage its storage (but not manage users or settings): treat it like a password, and don't paste it into chats.</p>
           <div class="btn-row"><button id="btnNodeCode">Make a node code</button><span class="muted small-text" id="nodeCodeStatus"></span></div>
           <div class="with-button" id="nodeCodeBox" hidden>
             <input id="nodeCodeValue" readonly class="mono">
