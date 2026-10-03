@@ -123,6 +123,8 @@ async function boot() {
   $('appVersion').textContent = me.version ? `v${me.version}` : '';
   showBuild(me.build);
   state.build = me.build;
+  state.version = me.version;
+  state.updatedFrom = me.updatedFrom;
   // Where new servers go by default (the development panel keeps its own folder).
   state.serverRoot = me.build === 'development' ? 'C:\\GameServers\\Dev' : 'C:\\GameServers';
   if (me.needsSetup) return show('viewSetup');
@@ -181,6 +183,7 @@ async function enterApp(user) {
   renderSidebar();
   connectEvents();
   loadAlerts();
+  showWhatsNew();
   if (hasGlobal('panel.settings')) {
     loadAppUpdate(false);
     // The service checks GitHub every 6 hours; asking it hourly just picks that up.
@@ -3561,6 +3564,60 @@ $('btnInstallUpdate').addEventListener('click', async () => {
     $('btnInstallUpdate').disabled = false;
   }
 });
+
+// ---------- "Tavern Host was updated" (once per browser, after a version change) ----------
+
+const versionNewer = (a, b) => {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+};
+
+/** CHANGELOG text ("**New**" headings, "- " items, **bold**) as headings and lists. */
+function renderNotes(box, text) {
+  box.innerHTML = '';
+  let list = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) {
+      list = null;
+      continue;
+    }
+    const plain = line.replace(/\*\*/g, '').replace(/`/g, '');
+    if (/^\*\*[^*]+\*\*$/.test(line)) {
+      box.appendChild(el('h4', 'section-label', plain));
+      list = null;
+    } else if (line.startsWith('- ')) {
+      list ??= box.appendChild(el('ul'));
+      list.appendChild(el('li', null, plain.slice(2)));
+    } else {
+      box.appendChild(el('p', null, plain));
+      list = null;
+    }
+  }
+}
+
+async function showWhatsNew() {
+  // The service says which version it was updated from (null = no update since it was installed). Each browser shows
+  // the box once per version, and only within two weeks of the update.
+  const current = state.version;
+  const u = state.updatedFrom;
+  if (!current || !u || (u.from && !versionNewer(current, u.from)) || Date.now() - u.at > 14 * 86400_000) return;
+  try {
+    if (localStorage.getItem('th-seen-update') === current) return;
+    localStorage.setItem('th-seen-update', current);
+  } catch {
+    return;
+  }
+  const last = u.from;
+  const r = await api('GET', `/api/changelog?version=${encodeURIComponent(current)}`).catch(() => null);
+  $('whatsNewTitle').textContent = `Tavern Host was updated to ${current}`;
+  if (r?.notes) renderNotes($('whatsNewBody'), r.notes);
+  else $('whatsNewBody').replaceChildren(el('p', 'muted', last ? `You were on ${last} before.` : 'See the release notes for what changed.'));
+  $('whatsNewDialog').showModal();
+}
+$('whatsNewClose').addEventListener('click', () => $('whatsNewDialog').close());
 
 // ---------- About / Help ----------
 

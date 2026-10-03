@@ -1,5 +1,11 @@
 # Changelog
 
+## Tavern Host 0.4.3
+
+**New**
+- After an update, Tavern Host shows what's new in the version you just got (once).
+- Every step of an update is written to update.log in Tavern Host's data folder, so a failed update can be traced.
+
 ## Tavern Host 0.4.2
 
 **Fixed**

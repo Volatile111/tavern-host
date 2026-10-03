@@ -238,8 +238,29 @@ route('GET', '/api/version', async (ctx) => {
   return { version: PANEL_VERSION, pid: process.pid, build: isDev ? 'development' : 'release' };
 });
 
+// The version this data folder ran last: when it changed, this start is the first one after an update (the page shows
+// "Tavern Host was updated to X" once).
+const updatedFrom: { from: string | null; at: number } | null = (() => {
+  const seen = readJson<{ version?: string; updatedFrom?: { from: string | null; at: number } } | null>('version.json', null);
+  if (seen?.version && seen.version !== PANEL_VERSION) {
+    const u = { from: seen.version, at: Date.now() };
+    writeJson('version.json', { version: PANEL_VERSION, updatedFrom: u });
+    return u;
+  }
+  if (!seen?.version) {
+    // Versions before 0.4.3 didn't write version.json. An in-app update leaves a recent "restarting for an update"
+    // notice, so that still counts as an update (from an unknown version); a fresh install doesn't.
+    const notice = readJson<{ reason?: string; at?: number } | null>('restart-notice.json', null);
+    const u = notice?.reason === 'update' && Date.now() - (notice.at ?? 0) < 30 * 60_000 ? { from: null, at: Date.now() } : null;
+    writeJson('version.json', { version: PANEL_VERSION, ...(u ? { updatedFrom: u } : {}) });
+    return u;
+  }
+  return seen.updatedFrom ?? null;
+})();
+
 route('GET', '/api/me', async ({ user, principal, remote }) => ({
   version: PANEL_VERSION,
+  updatedFrom,
   // "development" = running from the sources (test panel); "release" = an installed or portable build.
   build: isDev ? 'development' : 'release',
   user: user ? auth.toPublic(user) : null,
@@ -2083,6 +2104,23 @@ route('GET', '/api/app-update', async (ctx) => {
   needGlobal(ctx, 'panel.settings');
   await checkAppUpdate(new URL(ctx.req.url ?? '', 'http://x').searchParams.get('check') === '1');
   return appUpdateInfo(PANEL_VERSION);
+});
+
+// What changed in a version, from the CHANGELOG.md that ships with Tavern Host (the "updated to X" box after an update).
+route('GET', '/api/changelog', async (ctx) => {
+  need(ctx);
+  const version = new URL(ctx.req.url ?? '', 'http://x').searchParams.get('version') ?? PANEL_VERSION;
+  if (!/^\d+\.\d+\.\d+$/.test(version)) throw new HttpError(400, 'Bad version.');
+  let text = '';
+  try {
+    text = readFileSync(path.join(rootDir, 'CHANGELOG.md'), 'utf-8');
+  } catch {}
+  const heading = `## Tavern Host ${version}`;
+  const at = text.indexOf(heading);
+  if (at < 0) return { version, notes: null };
+  const rest = text.slice(at + heading.length);
+  const end = rest.search(/\n## /);
+  return { version, notes: (end < 0 ? rest : rest.slice(0, end)).trim() };
 });
 
 // Anyone may ask whether the panel is up (no version or server details, so it's safe over remote access too).

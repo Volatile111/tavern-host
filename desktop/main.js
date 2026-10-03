@@ -4,7 +4,7 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, shell, nativeImage } from 'electron';
 import { spawn, execFileSync } from 'node:child_process';
 import { randomBytes, createHash } from 'node:crypto';
-import { readFileSync, existsSync, openSync, statSync, mkdirSync, rmSync, createWriteStream, writeFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, existsSync, openSync, statSync, mkdirSync, rmSync, createWriteStream, writeFileSync, mkdtempSync, appendFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -576,7 +576,12 @@ ipcMain.handle('install-update', async () => {
   if (oldStyleRunners()) throw new Error('Some Java/Bedrock servers are still running under the old version. Stop them first, or update from a file.');
   updating = true;
   try {
-    const { file, version } = await downloadLatestInstaller(RELEASES, INSTALLER_ASSET, (p) => win?.webContents.send('update-progress', p));
+    updateLog('downloading the latest release from GitHub');
+    const { file, version } = await downloadLatestInstaller(RELEASES, INSTALLER_ASSET, (p) => win?.webContents.send('update-progress', p)).catch((err) => {
+      updateLog(`download failed: ${err.message}`);
+      throw err;
+    });
+    updateLog(`downloaded ${version} (checksum matched): ${file}`);
     // The download folder is removed once the installer has finished.
     runUpdateWithWindow(file, { product: 'Tavern Host', version, note: 'Your game servers keep running.', cleanup: path.dirname(file) });
     setTimeout(() => app.quit(), 800);
@@ -592,7 +597,10 @@ ipcMain.handle('install-update', async () => {
  * error). Same helper in the Tavern Client Mod Manager (companion/main.js).
  */
 function runUpdateWithWindow(installer, { product, version, note = '', cleanup = null }) {
+  updateLog(`starting the update helper for ${product} ${version || '(unknown version)'}: ${installer}`);
   const script = [
+    'function Log($m) { if ($env:TH_LOG) { Add-Content -LiteralPath $env:TH_LOG -Value ((Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "  helper: " + $m) -ErrorAction SilentlyContinue } }',
+    'Log "started; waiting for the app to close"',
     'Add-Type -AssemblyName System.Windows.Forms',
     'Add-Type -AssemblyName System.Drawing',
     '[System.Windows.Forms.Application]::EnableVisualStyles()',
@@ -618,6 +626,7 @@ function runUpdateWithWindow(installer, { product, version, note = '', cleanup =
     '    $alive = Get-Process -Id ([int]$env:TH_WAIT_PID) -ErrorAction SilentlyContinue',
     '    if (-not $alive -or ((Get-Date) - $script:started).TotalSeconds -gt 20) {',
     '      $label.Text = "Installing " + $env:TH_PRODUCT + " " + $env:TH_VERSION + "..." + $nl + "This takes a minute and it starts again by itself. " + $env:TH_NOTE',
+    '      Log ("app closed: " + (-not $alive) + "; running the installer")',
     "      $script:proc = Start-Process -FilePath $env:TH_INSTALLER -ArgumentList '/S','--force-run' -PassThru",
     '      $null = $script:proc.Handle',
     "      $script:state = 'installing'",
@@ -625,6 +634,7 @@ function runUpdateWithWindow(installer, { product, version, note = '', cleanup =
     "  } elseif ($script:state -eq 'installing' -and $script:proc.HasExited) {",
     '    $timer.Stop()',
     "    $bar.Style = 'Continuous'; $bar.Value = 100",
+    '    Log ("installer finished, exit code " + $script:proc.ExitCode)',
     '    if ($script:proc.ExitCode -eq 0) {',
     '      $label.Text = $env:TH_PRODUCT + " " + $env:TH_VERSION + " is installed. Starting it..."',
     '      if ($env:TH_CLEANUP) { Remove-Item -LiteralPath $env:TH_CLEANUP -Recurse -Force -ErrorAction SilentlyContinue }',
@@ -648,8 +658,21 @@ function runUpdateWithWindow(installer, { product, version, note = '', cleanup =
     stdio: 'ignore',
     windowsHide: true,
     windowsVerbatimArguments: true,
-    env: { ...process.env, TH_INSTALLER: installer, TH_PRODUCT: product, TH_VERSION: version || 'the new version', TH_NOTE: note, TH_WAIT_PID: String(process.pid), TH_CLEANUP: cleanup ?? '' },
+    env: { ...process.env, TH_INSTALLER: installer, TH_PRODUCT: product, TH_VERSION: version || 'the new version', TH_NOTE: note, TH_WAIT_PID: String(process.pid), TH_CLEANUP: cleanup ?? '', TH_LOG: UPDATE_LOG },
   }).unref();
+}
+
+// Every step of an update (download, hand-off, the helper's progress, the installer's result) goes in data\update.log,
+// so a failed update can be traced. Kept small: past 200 KB only the newer half is kept.
+const UPDATE_LOG = path.join(dataDir, 'update.log');
+function updateLog(line) {
+  try {
+    if (existsSync(UPDATE_LOG) && statSync(UPDATE_LOG).size > 200_000) {
+      const text = readFileSync(UPDATE_LOG, 'utf-8');
+      writeFileSync(UPDATE_LOG, text.slice(text.length / 2));
+    }
+    appendFileSync(UPDATE_LOG, `${new Date().toLocaleString('sv')}  app ${app.getVersion()}: ${line}\r\n`);
+  } catch {}
 }
 
 ipcMain.handle('browse-addons', async (_e, opts) => {
