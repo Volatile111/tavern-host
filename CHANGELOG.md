@@ -1,5 +1,16 @@
 # Changelog
 
+## Tavern Host 0.4.2
+
+**Fixed**
+- Installing an update from inside Tavern Host closed the app without installing anything (and didn't reopen it). The update now installs and Tavern Host opens again by itself. If you're on 0.4.0 or 0.4.1, install this version by hand once; updates work from the app after that.
+- The downloaded installer is deleted once the update is done.
+
+## Tavern Client Mod Manager 0.4.1
+
+**Fixed**
+- **Update now** closed the app without installing anything. The update now installs and the app opens again by itself. If you're on 0.4.0, install this version by hand once; updates work from the app after that.
+
 ## Tavern Host 0.4.1
 
 **Fixed**

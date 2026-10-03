@@ -4,7 +4,7 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, shell, nativeImage } from 'electron';
 import { spawn, execFileSync } from 'node:child_process';
 import { randomBytes, createHash } from 'node:crypto';
-import { readFileSync, existsSync, openSync, statSync, mkdirSync, rmSync, createWriteStream } from 'node:fs';
+import { readFileSync, existsSync, openSync, statSync, mkdirSync, rmSync, createWriteStream, writeFileSync, mkdtempSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -577,7 +577,8 @@ ipcMain.handle('install-update', async () => {
   updating = true;
   try {
     const { file, version } = await downloadLatestInstaller(RELEASES, INSTALLER_ASSET, (p) => win?.webContents.send('update-progress', p));
-    runUpdateWithWindow(file, { product: 'Tavern Host', version, note: 'Your game servers keep running.' });
+    // The download folder is removed once the installer has finished.
+    runUpdateWithWindow(file, { product: 'Tavern Host', version, note: 'Your game servers keep running.', cleanup: path.dirname(file) });
     setTimeout(() => app.quit(), 800);
     return { version };
   } finally {
@@ -590,7 +591,7 @@ ipcMain.handle('install-update', async () => {
  * (/S --force-run starts the new version when it's done), and shows each step (closing → installing → done, or the
  * error). Same helper in the Tavern Client Mod Manager (companion/main.js).
  */
-function runUpdateWithWindow(installer, { product, version, note = '' }) {
+function runUpdateWithWindow(installer, { product, version, note = '', cleanup = null }) {
   const script = [
     'Add-Type -AssemblyName System.Windows.Forms',
     'Add-Type -AssemblyName System.Drawing',
@@ -626,6 +627,7 @@ function runUpdateWithWindow(installer, { product, version, note = '' }) {
     "    $bar.Style = 'Continuous'; $bar.Value = 100",
     '    if ($script:proc.ExitCode -eq 0) {',
     '      $label.Text = $env:TH_PRODUCT + " " + $env:TH_VERSION + " is installed. Starting it..."',
+    '      if ($env:TH_CLEANUP) { Remove-Item -LiteralPath $env:TH_CLEANUP -Recurse -Force -ErrorAction SilentlyContinue }',
     '      $close = New-Object System.Windows.Forms.Timer; $close.Interval = 4000; $close.Add_Tick({ $form.Close() }); $close.Start()',
     '    } else {',
     '      $label.Text = "The update did not finish (installer exit code " + $script:proc.ExitCode + ")." + $nl + "Run the installer yourself: " + $env:TH_INSTALLER',
@@ -635,13 +637,18 @@ function runUpdateWithWindow(installer, { product, version, note = '' }) {
     '$timer.Start()',
     '[void]$form.ShowDialog()',
   ].join('\n');
-  spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], {
+  // The script goes in a file next to the download, started through "cmd /c start": that gives PowerShell a console of
+  // its own (hidden by -WindowStyle). Launched straight from this app (detached, no console) PowerShell quit at once
+  // without running anything, so the app closed and nothing was installed.
+  const dir = cleanup ?? mkdtempSync(path.join(app.getPath('temp'), 'tavern-updater-'));
+  const ps1 = path.join(dir, 'update.ps1');
+  writeFileSync(ps1, `﻿${script}`, 'utf-8');
+  spawn('cmd.exe', ['/d', '/s', '/c', `"start "" powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${ps1}""`], {
     detached: true,
     stdio: 'ignore',
-    // Not windowsHide: Windows would apply "hidden" to the first window the process opens, which is the update window.
-    // -WindowStyle Hidden hides PowerShell's console instead.
-    windowsHide: false,
-    env: { ...process.env, TH_INSTALLER: installer, TH_PRODUCT: product, TH_VERSION: version || 'the new version', TH_NOTE: note, TH_WAIT_PID: String(process.pid) },
+    windowsHide: true,
+    windowsVerbatimArguments: true,
+    env: { ...process.env, TH_INSTALLER: installer, TH_PRODUCT: product, TH_VERSION: version || 'the new version', TH_NOTE: note, TH_WAIT_PID: String(process.pid), TH_CLEANUP: cleanup ?? '' },
   }).unref();
 }
 
