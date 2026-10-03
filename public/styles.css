@@ -618,6 +618,7 @@ button.conn-chip:hover { border-color: var(--accent); }
 .boss { text-align: center; padding: 12px 6px; border-radius: 10px; background: var(--panel-2); color: var(--muted); font-weight: 600; font-size: 13px; }
 .boss.done { background: #3a2c12; color: #fde7b0; outline: 2px solid var(--gold); }
 .boss.done::before { content: "✓ "; color: var(--gold); }
+.boss.unsure { outline: 1px dashed var(--muted); cursor: help; }
 
 .console-bar { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
 .console-bar input { max-width: 320px; }

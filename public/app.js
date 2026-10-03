@@ -1240,7 +1240,13 @@ async function renderOverview() {
     $('ovBossCount').textContent = `${done} / ${world.bosses.length}`;
     const box = $('ovBosses');
     box.innerHTML = '';
-    for (const b of world.bosses) box.appendChild(el('div', `boss${b.defeated ? ' done' : ''}`, b.name));
+    for (const b of world.bosses) {
+      const pill = el('div', `boss${b.defeated ? ' done' : b.unsure ? ' unsure' : ''}`, b.unsure ? `${b.name} ?` : b.name);
+      if (b.unsure) {
+        pill.title = `Can't tell yet. This world has a defeat marker Tavern Host doesn't recognise (${world.unknownKeys.join(', ')}). It may be ${b.name}'s, or come from a mod or an older Valheim version.`;
+      }
+      box.appendChild(pill);
+    }
   }
 }
 

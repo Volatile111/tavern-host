@@ -1,5 +1,10 @@
 # Changelog
 
+## Tavern Host 0.4.4
+
+**Fixed**
+- Valheim: Kall could show as defeated when it wasn't, on worlds made before 1.0 (or with mods that add their own "defeated" markers). Tavern Host no longer guesses: Kall shows "?" with the marker it found until Kall's own marker is known.
+
 ## Tavern Host 0.4.3
 
 **New**

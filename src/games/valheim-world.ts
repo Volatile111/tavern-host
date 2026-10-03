@@ -7,7 +7,8 @@ import { inflateRawSync } from 'node:zlib';
 import path from 'node:path';
 
 // In progression order. `key` is the global key set when the boss is defeated.
-// Kall's key isn't known yet: any unrecognised "defeated_*" key is treated as Kall.
+// Kall's key isn't known yet. Unrecognised "defeated_*" keys are NOT counted as Kall: worlds made before 1.0 (and
+// mods) can carry other ones, which wrongly showed Kall as defeated. Kall shows as "unknown" with the keys instead.
 export const BOSSES = [
   { id: 'eikthyr', name: 'Eikthyr', key: 'defeated_eikthyr' },
   { id: 'elder', name: 'The Elder', key: 'defeated_gdking' },
@@ -23,7 +24,8 @@ const NON_BOSS_KEYS = new Set(['defeated_serpent']);
 export interface WorldInfo {
   saveFile: string;
   savedAt: number;
-  bosses: { id: string; name: string; defeated: boolean }[];
+  /** `unsure`: Tavern Host can't tell (Kall, while its key isn't known and the world has unrecognised keys). */
+  bosses: { id: string; name: string; defeated: boolean; unsure?: boolean }[];
   unknownKeys: string[];
 }
 
@@ -74,7 +76,7 @@ export async function readWorldInfo(worldsDir: string, world: string): Promise<W
   const info: WorldInfo = {
     saveFile,
     savedAt: mtimeMs,
-    bosses: BOSSES.map((b) => ({ id: b.id, name: b.name, defeated: b.key ? keys.has(b.key) : unknownKeys.length > 0 })),
+    bosses: BOSSES.map((b) => (b.key ? { id: b.id, name: b.name, defeated: keys.has(b.key) } : { id: b.id, name: b.name, defeated: false, ...(unknownKeys.length ? { unsure: true } : {}) })),
     unknownKeys,
   };
   cache.set(saveFile, { mtimeMs, info });
