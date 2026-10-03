@@ -66,6 +66,34 @@ function applyPermVisibility(root = document) {
   for (const node of root.querySelectorAll('[data-global]')) node.classList.toggle('no-global', !node.dataset.global.split('|').some((x) => hasGlobal(x)));
 }
 
+/**
+ * Asks for a line of text in a small dialog; resolves to the text, or null if cancelled. Used instead of prompt(),
+ * which the desktop app (Electron) doesn't support: there it throws, so the button silently did nothing.
+ */
+function ask(message, value = '') {
+  return new Promise((resolve) => {
+    const dialog = $('askDialog');
+    $('askMessage').textContent = message;
+    $('askInput').value = value;
+    let answer = null;
+    const done = () => {
+      $('askForm').onsubmit = null;
+      $('askCancel').onclick = null;
+      dialog.removeEventListener('close', done);
+      resolve(answer);
+    };
+    $('askForm').onsubmit = (e) => {
+      e.preventDefault();
+      answer = $('askInput').value;
+      dialog.close();
+    };
+    $('askCancel').onclick = () => dialog.close();
+    dialog.addEventListener('close', done);
+    dialog.showModal();
+    $('askInput').select();
+  });
+}
+
 function show(view) {
   for (const v of ['viewSetup', 'viewLogin', 'viewApp']) $(v).hidden = v !== view;
 }
@@ -934,11 +962,11 @@ function playerActionMenu(p, data) {
     if (!a) return;
     const body = { action: a };
     if (a === 'kick' || a === 'ban') {
-      const reason = prompt(`${a === 'kick' ? 'Kick' : 'Ban'} ${p.name}. Reason (optional, shown to them):`, '');
+      const reason = await ask(`${a === 'kick' ? 'Kick' : 'Ban'} ${p.name}. Reason (optional, shown to them):`, '');
       if (reason === null) return;
       body.reason = reason;
     } else if (a === 'note') {
-      const note = prompt(`Note about ${p.name} (only admins see this; empty to clear):`, p.note ?? '');
+      const note = await ask(`Note about ${p.name} (only admins see this; empty to clear):`, p.note ?? '');
       if (note === null) return;
       body.note = note;
     } else if (!['mute', 'unmute'].includes(a) && !confirm(`${PLAYER_ACTION_LABELS[a]}: ${p.name}?`)) return;
@@ -1663,7 +1691,7 @@ $('btnBuUpdate').addEventListener('click', async () => {
   const running = ['running', 'starting'].includes(state.detail.status);
   let minutes = 0;
   if (running) {
-    const answer = prompt('The server is running. Warn players for how many minutes before it stops to update? (0 = right away)', '5');
+    const answer = await ask('The server is running. Warn players for how many minutes before it stops to update? (0 = right away)', '5');
     if (answer === null) return;
     minutes = Math.max(0, Math.min(Number(answer) || 0, 60));
   } else if (!confirm('Update to the latest version? The world is backed up first.')) return;
@@ -1683,7 +1711,7 @@ $('btnBuForce').addEventListener('click', async () => {
   const src = UPDATE_GAMES[state.detail.game]?.source ?? 'for updates';
   let minutes = 0;
   if (running) {
-    const answer = prompt(`Force update: Tavern Host checks ${src} right now and installs the latest server, even if this one looks up to date.\n\nThe server is running. Warn players for how many minutes before it stops? (0 = right away)`, '5');
+    const answer = await ask(`Force update: Tavern Host checks ${src} right now and installs the latest server, even if this one looks up to date.\n\nThe server is running. Warn players for how many minutes before it stops? (0 = right away)`, '5');
     if (answer === null) return;
     minutes = Math.max(0, Math.min(Number(answer) || 0, 60));
   } else if (!confirm(`Force update: check ${src} right now and install the latest server, even if this one looks up to date?\n\nThe world is backed up first; worlds and settings are kept.`)) return;
@@ -3085,7 +3113,7 @@ async function loadNodes() {
     row.appendChild(info);
     const rename = el('button', 'small ghost', 'Rename');
     rename.addEventListener('click', async () => {
-      const name = prompt('Name for this system:', n.name);
+      const name = await ask('Name for this system:', n.name);
       if (!name) return;
       await api('PUT', `/api/nodes/${n.id}`, { name }).catch((err) => toast(err.message, true));
       loadNodes();
@@ -3322,7 +3350,7 @@ $('worldImportFile').addEventListener('change', async () => {
   const file = $('worldImportFile').files[0];
   $('worldImportFile').value = '';
   if (!file) return;
-  const name = prompt('Name for the imported world (leave empty to use the name inside the file):', '');
+  const name = await ask('Name for the imported world (leave empty to use the name inside the file):', '');
   if (name === null) return;
   const activate = hasPerm('properties.edit') && confirm('Make it the active world (loaded at the next start)?');
   $('worldsStatus').textContent = `Importing ${file.name}…`;
