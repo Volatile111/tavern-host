@@ -1,5 +1,10 @@
 # Changelog
 
+## Tavern Host 0.5.4
+
+**Fixed**
+- Security: Tavern Vault calls that would hand out something secret (for example an encryption recovery key, a password or a token) always need **Manage storage**, even when they're named like a read-only call.
+
 ## Tavern Host 0.5.3
 
 **Improved**
