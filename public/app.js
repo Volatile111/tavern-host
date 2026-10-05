@@ -4602,6 +4602,12 @@ const API_DOCS = [
     ['POST', '/api/servers/{id}/worlds/import?name=&activate=1', 'Import a world (raw .mcworld/.zip body, X-Filename header)', 'Edit & upload files (+ Edit properties & world to activate)'],
     ['DELETE', '/api/servers/{id}/worlds/{folder}', 'Delete a world (Recycle Bin)', 'Edit & upload files'],
   ]],
+  ['BungeeCord network', [
+    ['GET', '/api/servers/{id}/network', "A proxy's servers (config.yml), where players land first (priorities), and Tavern Host's Minecraft Java servers that can be added", 'See the server'],
+    ['POST', '/api/servers/{id}/network', 'Add a server: {"serverId"?: a Tavern Host server (address filled in) | "address": "host:port", "name", "first"?: true, "prepare"?: true (Paper/Spigot: bungeecord: true, online-mode=false)}', 'Edit properties & world (+ on the added server, to prepare it)'],
+    ['DELETE', '/api/servers/{id}/network/{name}', "Remove a server from the proxy's list", 'Edit properties & world'],
+    ['PUT', '/api/servers/{id}/network/default', 'Where players land first: {"name"}', 'Edit properties & world'],
+  ]],
   ['Valheim profiles', [
     ['GET', '/api/servers/{id}/profiles', 'Profiles (a world plus which mods are on, or vanilla) and the active one', 'See the server'],
     ['POST', '/api/servers/{id}/profiles', 'Add a profile: {"name","world"?,"vanilla"?} (starts as a copy of how the server is set up now)', 'Change settings'],
@@ -4629,6 +4635,7 @@ const API_DOCS = [
     ['POST', '/api/servers/{id}/addons/check-updates', 'Newer versions available (Valheim: Thunderstore/Hexium; Bedrock: CurseForge, for linked addons)', 'See the server'],
     ['POST', '/api/servers/{id}/addons/{item}/update', 'Update one (Valheim; Bedrock: installs the newest CurseForge file on the chosen channel)', 'Manage mods / plugins / addons'],
     ['POST', '/api/servers/{id}/addons/{item}/curseforge', 'Bedrock: link an addon to a CurseForge project for updates: {"projectId":123}, or {"projectId":null} to unlink', 'Manage mods / plugins / addons'],
+    ['POST', '/api/servers/{id}/addons/by-id', 'Add a mod by ID or link (Space Engineers: Steam Workshop): {"input":"https://steamcommunity.com/sharedfiles/filedetails/?id=…"}', 'Manage mods / plugins / addons'],
     ['GET', '/api/servers/{id}/addons/update-settings', 'Bedrock addon updates: {channel: "release"|"beta"|"alpha", auto}', 'See the server'],
     ['PUT', '/api/servers/{id}/addons/update-settings', 'Change them: {"channel":"beta","auto":true} (beta/alpha files only count when newer than the newest release)', 'Manage mods / plugins / addons'],
     ['POST', '/api/servers/{id}/addons/setup', 'Turn on modding (Valheim: installs BepInEx; permanent)', 'Manage mods / plugins / addons'],
