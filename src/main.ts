@@ -50,7 +50,7 @@ import { portHelp } from './port-help.ts';
 import { difficultyInfo, setDifficulty } from './difficulty.ts';
 import { supportsWorlds, listWorlds, setActiveWorld, exportWorld, importWorld, deleteWorld } from './worlds.ts';
 import { listAlerts, dismissAlert, startHealthChecks, type Alert } from './health.ts';
-import { vaultState, vaultCall, vaultEvents, vaultUiFile, vaultShim, vaultPage, VIEW_METHODS, UI_FILES as VAULT_UI } from './vault.ts';
+import { vaultState, vaultCall, vaultEvents, vaultUiFile, vaultShim, vaultPage, isViewMethod, UI_FILES as VAULT_UI } from './vault.ts';
 import { worldCheckInfo, checkNow, acceptCurrent, startWorldChecks } from './world-check.ts';
 import { GAMES, events, loadInstances, listInstances, getInstance, createServer, createNewServer, updateServer, deleteServer, reorderServers } from './instances.ts';
 
@@ -617,7 +617,7 @@ async function localVault() {
 
 function needStorage(ctx: Ctx, method?: string): Principal {
   const p = need(ctx);
-  const right: GlobalPerm = method && !VIEW_METHODS.has(method) ? 'storage.manage' : 'storage.view';
+  const right: GlobalPerm = method && !isViewMethod(method) ? 'storage.manage' : 'storage.view';
   if (!canGlobal(p, right)) throw new HttpError(403, right === 'storage.manage' ? 'You can see storage but not change it (needs "Manage storage").' : 'You do not have permission to see storage.');
   return p;
 }
@@ -639,7 +639,7 @@ route('POST', '/api/vault/call', async (ctx) => {
   const p = needStorage(ctx, method);
   needStorageOn();
   const r = await vaultCall(method, body.args ?? {}, vaultVia(p, body));
-  if (!VIEW_METHODS.has(method) && r.ok && !(r.data as { practice?: boolean })?.practice) audit(p, `storage: ${method}`);
+  if (!isViewMethod(method) && r.ok && !(r.data as { practice?: boolean })?.practice) audit(p, `storage: ${method}`);
   return r;
 });
 route('GET', '/api/vault/events', async (ctx) => {
@@ -697,7 +697,7 @@ route('POST', '/api/nodes/:id/vault/call', async (ctx) => {
   const p = needStorage(ctx, method);
   const node = getNode(ctx.params[0]);
   const r = await nodeVault<{ ok: boolean; data?: unknown }>(node.id, 'POST', '/api/vault/call', { method, args: body.args ?? {}, via: `${os.hostname()} (master) · ${p.name}` });
-  if (!VIEW_METHODS.has(method) && r.ok && !(r.data as { practice?: boolean })?.practice) audit(p, `storage on ${node.name}: ${method}`);
+  if (!isViewMethod(method) && r.ok && !(r.data as { practice?: boolean })?.practice) audit(p, `storage on ${node.name}: ${method}`);
   return r;
 });
 route('GET', '/api/nodes/:id/vault/events', async (ctx) => {

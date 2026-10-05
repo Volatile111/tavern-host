@@ -1,11 +1,16 @@
 # Changelog
 
+## Tavern Host 0.5.3
+
+**Improved**
+- Storage works with everything new in Tavern Vault 0.3 (drive health, burn-in, hot spares, snapshots, backups, bay map, capacity forecasts, speed, encryption, moving data, TrueNAS and the health report). People with **See storage** can open all of its read-only pages; changes still need **Manage storage**.
+- Things only the Tavern Vault window on that PC can do (its file pickers, saving files, node mode, its direct link, updating it) now say so clearly instead of failing.
+
 ## Tavern Host 0.5.2
 
 **Fixed**
-- Valheim: Kall could show as defeated when it wasn't, on worlds made before 1.0 (or with mods that add their own "defeated" markers). Tavern Host no longer guesses: Kall shows "?" with the marker it found until Kall's own marker is known.
-- Storage changes made with an API key always show that key's name in Tavern Vault's activity log.
-- 0.5.0 and 0.5.1 are now on GitHub too, so copies on those versions get updates from the app.
+- Valheim: Kall no longer shows as defeated just because a world has a defeat marker Tavern Host doesn't recognise (older worlds and mods can carry other ones). Kall shows as unknown ("?") instead, with the marker named when you hover it.
+- Storage changes made through a node link are logged with that link's own key name too, so a key can't make its changes look like someone else's.
 
 ## Tavern Host 0.5.1
 

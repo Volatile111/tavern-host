@@ -8,10 +8,14 @@ import path from 'node:path';
 
 const DIR = process.env.TAVERN_VAULT_DATA ?? path.join(process.env.ProgramData ?? 'C:\\ProgramData', 'Tavern Vault');
 
-/** Read-only calls (storage.view); every other Tavern Vault call needs storage.manage. */
+/**
+ * Read-only calls (storage.view); every other Tavern Vault call needs storage.manage. Besides these names, Tavern Vault
+ * names every read-only call get… or list… (Tavern Vault 0.3+: SMART, jobs, snapshots, backups, bay map, report…).
+ */
 export const VIEW_METHODS = new Set(['state', 'inventory', 'scrubInfo', 'activity', 'arrays', 'validateArray', 'discoverArrays', 'snapraidRunning', 'schedules']);
-/** Only the Tavern Vault window on that PC can do these (native pickers, node mode itself). */
-const WINDOW_ONLY = new Set(['setNodeMode', 'pickFile', 'pickFolder', 'openPath', 'openExternal']);
+export const isViewMethod = (m: string) => VIEW_METHODS.has(m) || /^(get|list)[A-Z]/.test(m);
+/** Only the Tavern Vault window on that PC can do these (native pickers, files, node mode, its direct link, updates). */
+const WINDOW_ONLY = new Set(['setNodeMode', 'pickFile', 'pickFolder', 'openPath', 'openExternal', 'saveReport', 'saveText', 'pickInstaller', 'runInstaller', 'makeNodeCode', 'stopLink', 'linkInfo']);
 export const UI_FILES: Record<string, string> = { 'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript', 'styles.css': 'text/css' };
 
 export type VaultState =
