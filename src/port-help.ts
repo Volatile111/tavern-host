@@ -104,6 +104,10 @@ export async function portHelp(record: ServerRecord, connection: { port: number 
       );
     }
     notes.push('Players join from the Join Game tab → Add server, with your public IP and port.');
+  } else if (record.game === 'spaceengineers') {
+    forwards.push({ protocol: 'UDP', ports: String(port ?? 27016), why: 'The game port players connect to.' });
+    notes.push('Don’t forward the Remote API port: only Tavern Host on this system uses it.');
+    notes.push('Players join from the in-game server list (Public) or Join Game → the IP and port.');
   } else if (record.game === 'satisfactory') {
     forwards.push({ protocol: 'TCP & UDP', ports: String(port ?? 7777), why: 'The game port; the server’s HTTPS API (used by the in-game Server Manager) is on it too.' });
     forwards.push({ protocol: 'TCP', ports: String(Number(record.settings.reliablePort) || 8888), why: 'Reliable messaging (needed since Satisfactory 1.1).' });

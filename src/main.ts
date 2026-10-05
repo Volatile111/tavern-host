@@ -1036,6 +1036,8 @@ route('GET', '/api/servers/:id/addons', async (ctx) => {
     canCheckUpdates: !!addons.checkUpdates,
     // Listed only: another tool manages them (Satisfactory Mod Manager).
     readOnly: !!addons.readOnly,
+    // Added by ID or link instead of a file (Space Engineers: Steam Workshop).
+    canAddById: !!addons.addById,
     share: inst.record.game === 'valheim' ? { enabled: !!shareToken(inst.id) } : null,
     locations: addons.locations
       ? { options: addons.locations.options, current: addons.locations.get(inst.record), paths: addons.locations.describe(inst.record) }
@@ -1371,6 +1373,22 @@ route('POST', '/api/servers/:id/addons/curseforge', async (ctx) => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// Adds a mod by ID or link (games whose mods come from somewhere like the Steam Workshop). Body: {"input": "..."}.
+route('POST', '/api/servers/:id/addons/by-id', async (ctx) => {
+  const p = needServer(ctx, 'addons.manage', ctx.params[0]);
+  const { inst, addons } = addonsOf(ctx.params[0]);
+  if (!addons.addById) throw new HttpError(404, 'This game adds mods from files.');
+  const { input } = await readBody(ctx.req);
+  let result;
+  try {
+    result = await addons.addById(inst.record, String(input ?? ''));
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+  audit(p, `added mod ${String(input).slice(0, 120)} on "${inst.record.name}"`);
+  return { ...result, packs: addons.list(inst.record), running: inst.isRunning };
 });
 
 // ---------- Bedrock addon updates (CurseForge) ----------

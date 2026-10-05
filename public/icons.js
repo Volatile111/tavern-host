@@ -79,6 +79,11 @@ const ICONS = {
     '#2b2f36',
     '<path d="M5 24V14l5 3v-3l5 3v-3l5 3V8h4v16z" fill="#f2a33a"/><rect x="21" y="5" width="2" height="4" fill="#c9cdd3"/><rect x="5" y="24" width="22" height="3" rx="1.5" fill="#c9cdd3"/><circle cx="8" cy="25.5" r="1" fill="#2b2f36"/><circle cx="16" cy="25.5" r="1" fill="#2b2f36"/><circle cx="24" cy="25.5" r="1" fill="#2b2f36"/><rect x="8" y="19" width="3" height="3" fill="#2b2f36"/><rect x="14" y="19" width="3" height="3" fill="#2b2f36"/>',
   ),
+  // A small ship over a planet
+  spaceengineers: tile(
+    '#0e1426',
+    '<circle cx="9" cy="24" r="9" fill="#3a6fb0"/><path d="M2 22c4 1 9 1 14-2" stroke="#7fb2e8" stroke-width="1.5" fill="none"/><circle cx="25" cy="5" r="0.8" fill="#dfe7f5"/><circle cx="18" cy="4" r="0.6" fill="#dfe7f5"/><path d="M14 13l9-5 5 3-9 5z" fill="#d6dbe3"/><path d="M14 13l5 3v3l-5-3z" fill="#9aa3b1"/><path d="M19 16l9-5v3l-9 5z" fill="#b6bdc8"/><rect x="21" y="9.5" width="2.5" height="1.5" fill="#ffb347"/>',
+  ),
   // Horned helmet
   valheim: tile(
     '#4a1f1a',

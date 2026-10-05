@@ -122,6 +122,8 @@ export interface AddonSupport {
   accept: string;
   /** Listed only: another tool manages them (Satisfactory: Satisfactory Mod Manager). No upload box or buttons. */
   readOnly?: boolean;
+  /** Adds an item by ID or link instead of a file (Space Engineers: Steam Workshop). Shows an input box on the Mods tab. */
+  addById?(record: ServerRecord, input: string): Promise<{ installed: unknown[]; warnings: string[] }>;
   /** `install` also accepts a folder (Bedrock: unpacked behavior/resource packs can be dropped as folders). */
   folders?: boolean;
   /** Changes need the server stopped (Valheim: loaded mod DLLs are locked while it runs). */
@@ -210,6 +212,8 @@ export interface GameModule {
   runCommand?(record: ServerRecord, command: string): Promise<string | void>;
   /** A clean stop the game's own way (Satisfactory: save, then the API's Shutdown). true = asked; false = fall back to Ctrl+C. */
   gracefulStop?(record: ServerRecord, note: (message: string) => void): Promise<boolean>;
+  /** A message to everyone in the game, the game's own way (Space Engineers: Remote API chat). Used for countdown warnings. */
+  say?(record: ServerRecord, text: string): Promise<void>;
   /** Runs once each time the server becomes ready (Satisfactory: claim it, create the first game, apply settings). */
   onReady?(record: ServerRecord, note: (message: string) => void): Promise<void>;
   /** Runs before every start (e.g. download the Java runtime if it's missing). `note` writes to the console. */

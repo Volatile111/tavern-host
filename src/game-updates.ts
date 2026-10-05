@@ -14,6 +14,7 @@ import { latestDownload, installedVersion } from './games/bedrock.ts';
 import { latestBuild, installedBuild } from './steamcmd.ts';
 import { latestTmlVersion, installedTmlVersion } from './games/terraria.ts';
 import { SATISFACTORY_APP } from './games/satisfactory.ts';
+import { SPACE_ENGINEERS_APP } from './games/spaceengineers.ts';
 import { readProperties } from './properties.ts';
 
 type Instance = ReturnType<typeof getInstance>;
@@ -120,6 +121,29 @@ const SOURCES: Record<string, Source> = {
     installed: (inst, build) => {
       try {
         writeFileSync(buildNote(inst), JSON.stringify({ appId: SATISFACTORY_APP, build, at: Date.now() }, null, 2));
+      } catch {}
+    },
+  },
+  // Space Engineers' dedicated server on Steam (public branch build).
+  spaceengineers: {
+    name: 'Space Engineers',
+    latest: async () => {
+      const b = await latestBuild(SPACE_ENGINEERS_APP);
+      return { version: b.build, updated: b.updated };
+    },
+    current: (inst) => {
+      const fromSteam = installedBuild(SPACE_ENGINEERS_APP, inst.record.installDir);
+      if (fromSteam) return fromSteam;
+      try {
+        return String(JSON.parse(readFileSync(buildNote(inst), 'utf-8')).build ?? '') || null;
+      } catch {
+        return null;
+      }
+    },
+    newer: (a, b) => Number(a) > Number(b),
+    installed: (inst, build) => {
+      try {
+        writeFileSync(buildNote(inst), JSON.stringify({ appId: SPACE_ENGINEERS_APP, build, at: Date.now() }, null, 2));
       } catch {}
     },
   },

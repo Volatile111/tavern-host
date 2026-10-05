@@ -1876,6 +1876,11 @@ const UPDATE_GAMES = {
     autoHelp: "Automatic updates: when Steam has a new Satisfactory server build, Tavern Host waits until nobody is online (at most an hour; Satisfactory can't message players), saves and backs up, lets Steam install the update and starts the server again. Players' games must be on the same version (Steam updates them). Mods may need updating in Satisfactory Mod Manager after a big game update. Checked every 30 minutes.",
     forceHelp: 'Force update: asks Steam right now and re-runs the update with a full file check, even if this server already looks up to date.',
   },
+  spaceengineers: {
+    source: 'Steam',
+    autoHelp: "Automatic updates: when Steam has a new Space Engineers server build, players get a 5-minute countdown in chat, the world is backed up, Steam installs the update and the server starts again. Players' games must be on the same version (Steam updates them). Checked every 30 minutes.",
+    forceHelp: 'Force update: asks Steam right now and re-runs the update with a full file check, even if this server already looks up to date.',
+  },
   terraria: {
     source: 'GitHub (tModLoader releases)',
     autoHelp: "Automatic updates: when tModLoader releases a new version, players get a 5-minute countdown in chat, the world is backed up, the new version is installed and the server starts again. Players' tModLoader must be on the same version (Steam updates it). Checked every 30 minutes.",
@@ -3152,6 +3157,7 @@ const GAME_BLURBS = {
   java: 'Minecraft Java Edition: Vanilla, Paper, Fabric, Forge, NeoForge and more.',
   terraria: 'Terraria with tModLoader: vanilla-style or modded. Players’ games download the server’s mods by themselves.',
   satisfactory: 'Factory building co-op. Works with the in-game Server Manager; mods through Satisfactory Mod Manager.',
+  spaceengineers: 'Build ships and stations in space. Steam Workshop mods download to players by themselves.',
 };
 function renderGamePicks() {
   const box = $('newGamePicks');
@@ -5000,7 +5006,9 @@ async function loadAddons() {
   const L = addonState.labels;
   // Listed only (Satisfactory: mods are managed with Satisfactory Mod Manager): no upload box.
   $('addonAddTitle').textContent = addonState.readOnly ? L.tab : `Add ${L.plural}`;
-  $('addonDrop').hidden = !!addonState.readOnly;
+  // Games whose mods are added by ID (Space Engineers: Steam Workshop) get a box instead of the file drop.
+  $('addonDrop').hidden = !!addonState.readOnly || !!addonState.canAddById;
+  $('addonByIdForm').hidden = !addonState.canAddById;
   $('addonAddHelp').innerHTML = L.dropHelp; // fixed text from Tavern Host itself
   // Bedrock also takes unpacked pack folders.
   $('addonDrop').querySelector('span').innerHTML = addonState.folders
@@ -5118,6 +5126,25 @@ function renderAddonStatus() {
 }
 
 let addonUpdates = {};
+
+$('addonByIdForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const input = $('addonByIdInput').value.trim();
+  if (!input) return;
+  const btn = $('addonByIdForm').querySelector('button');
+  btn.disabled = true;
+  try {
+    const r = await api('POST', `/api/servers/${state.selected}/addons/by-id`, { input });
+    $('addonByIdInput').value = '';
+    addonState.packs = r.packs;
+    showInstallResult(r);
+    renderAddons();
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 /** Shows a list to choose from; resolves to the chosen item, or null if cancelled. */
 function pick(title, help, items, describe) {

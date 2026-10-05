@@ -16,13 +16,14 @@ import { bedrock } from './games/bedrock.ts';
 import { java } from './games/java.ts';
 import { terraria } from './games/terraria.ts';
 import { satisfactory } from './games/satisfactory.ts';
+import { spaceEngineers } from './games/spaceengineers.ts';
 import { setStatsSource, forgetStats } from './stats.ts';
 import { parseChatLine, recordChat } from './chat.ts';
 import { syncPlayers, forgetPlayers, mutedPlayers } from './players.ts';
 import { createBackup, restoreBackup, pruneScheduled, listBackups, backupsFolder, resumeCutOffBackup, type BackupKind, type BackupTarget } from './backups.ts';
 import { assertModifiable, recycle } from './files.ts';
 
-export const GAMES: Record<string, GameModule> = { bedrock, java, valheim, terraria, satisfactory };
+export const GAMES: Record<string, GameModule> = { bedrock, java, valheim, terraria, satisfactory, spaceengineers: spaceEngineers };
 
 // runner.ts in development, runner.js in the installed (compiled) app: same folder and extension as this file.
 const thisFile = fileURLToPath(import.meta.url);
@@ -134,7 +135,7 @@ class ServerInstance {
 
   /** Games that can't be messaged in chat are left out of countdown warnings (announce needs a "say" command). */
   get canAnnounce() {
-    return !!(this.module.commands || this.module.consoleCommands);
+    return !!(this.module.commands || this.module.consoleCommands || this.module.say);
   }
 
   private setStatus(status: Status, error: string | null = this.lastError) {
@@ -521,6 +522,11 @@ class ServerInstance {
   /** A message to everyone in the game (gold "[Server]" text where the game supports it). */
   async announce(text: string) {
     if (!this.canAnnounce || !this.isRunning) return;
+    // Games with their own way to message everyone (Space Engineers: Remote API chat).
+    if (this.module.say) {
+      await this.module.say(this.record, `[Server] ${text}`).catch(() => {});
+      return;
+    }
     const cmd =
       this.record.game === 'bedrock'
         ? `tellraw @a ${JSON.stringify({ rawtext: [{ text: `§6[Server]§r ${text}` }] })}`
