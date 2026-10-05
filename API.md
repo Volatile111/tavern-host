@@ -1,6 +1,6 @@
 # Tavern Host HTTP API
 
-Reference for Tavern Host 0.5.2. This file is generated from the list in `public/app.js` (the same one the panel shows in Settings → API reference) by `node tools/make-api-docs.mjs`.
+Reference for Tavern Host 0.5.4. This file is generated from the list in `public/app.js` (the same one the panel shows in Settings → API reference) by `node tools/make-api-docs.mjs`.
 
 > Tavern Host is in beta and updates are frequent. Routes can change between versions; check this file for the version you run.
 
@@ -168,8 +168,11 @@ curl -X POST -H "Authorization: Bearer th_…" -H "Content-Type: application/jso
 | `POST /api/servers/{id}/addons/{item}/enabled` | Switch on/off: {"enabled":true} | Manage mods / plugins / addons |
 | `DELETE /api/servers/{id}/addons/{item}` | Remove | Manage mods / plugins / addons |
 | `PUT /api/servers/{id}/addons/order` | Bedrock load order: {"type":"behavior"\|"resource","ids":[...]} top first (top wins); "priority" in the list | Manage mods / plugins / addons |
-| `POST /api/servers/{id}/addons/check-updates` | Newer versions available (Valheim) | See the server |
-| `POST /api/servers/{id}/addons/{item}/update` | Update one (Valheim) | Manage mods / plugins / addons |
+| `POST /api/servers/{id}/addons/check-updates` | Newer versions available (Valheim: Thunderstore/Hexium; Bedrock: CurseForge, for linked addons) | See the server |
+| `POST /api/servers/{id}/addons/{item}/update` | Update one (Valheim; Bedrock: installs the newest CurseForge file on the chosen channel) | Manage mods / plugins / addons |
+| `POST /api/servers/{id}/addons/{item}/curseforge` | Bedrock: link an addon to a CurseForge project for updates: {"projectId":123}, or {"projectId":null} to unlink | Manage mods / plugins / addons |
+| `GET /api/servers/{id}/addons/update-settings` | Bedrock addon updates: {channel: "release"\|"beta"\|"alpha", auto} | See the server |
+| `PUT /api/servers/{id}/addons/update-settings` | Change them: {"channel":"beta","auto":true} (beta/alpha files only count when newer than the newest release) | Manage mods / plugins / addons |
 | `POST /api/servers/{id}/addons/setup` | Turn on modding (Valheim: installs BepInEx; permanent) | Manage mods / plugins / addons |
 | `POST /api/servers/{id}/addons/{item}/side` | Valheim: who gets a mod: {"side":"both\|server\|clients"} (server = not shared with players) | Manage mods / plugins / addons |
 | `PUT /api/servers/{id}/addons/location` | Where new addons go (games with more than one addon folder): {"location"} | Manage mods / plugins / addons |
