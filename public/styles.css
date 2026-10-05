@@ -638,6 +638,16 @@ button.conn-chip:hover { border-color: var(--accent); }
 .boss.done { background: #3a2c12; color: #fde7b0; outline: 2px solid var(--gold); }
 .boss.done::before { content: "✓ "; color: var(--gold); }
 .boss.unsure { outline: 1px dashed var(--muted); cursor: help; }
+.addon-update-settings { display: inline-flex; align-items: center; gap: 10px; }
+.addon-update-settings .toggle { margin: 0; }
+.pick-list { display: grid; gap: 6px; max-height: 55vh; overflow-y: auto; margin: 10px 0; }
+.pick-list button { display: flex; gap: 10px; align-items: center; text-align: left; padding: 8px 10px; }
+.pick-list img { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; flex: none; }
+.pick-list .pick-sub { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+a.type-badge.curseforge { text-decoration: none; color: #f16436; border: 1px solid color-mix(in srgb, #f16436 50%, transparent); }
+.field-section { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.field-section h4 { margin: 0 0 2px; }
+.field-section p { margin: 0; }
 
 .console-bar { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
 .console-bar input { max-width: 320px; }

@@ -450,8 +450,17 @@
             <div class="installed-head">
               <h3>Installed <span class="count" id="addonCount"></span></h3>
               <div class="move-all" id="addonMoveAll"></div>
+              <span class="addon-update-settings" id="addonUpdateSettings" hidden>
+                <select id="addonChannel" class="side-select" title="Which CurseForge files count as updates. Betas and alphas only when they're newer than the newest release.">
+                  <option value="release">Releases only</option>
+                  <option value="beta">Releases + beta</option>
+                  <option value="alpha">Releases + beta + alpha</option>
+                </select>
+                <label class="toggle small-text" title="Checks CurseForge every 6 hours and installs new versions by itself (loaded at the next restart)."><input type="checkbox" id="addonAutoUpdate"> Update automatically</label>
+              </span>
               <button class="small" id="addonCheckUpdates" hidden>Check for updates</button>
             </div>
+            <p class="muted small-text" id="addonUpdateHelp" hidden>Updates come from CurseForge (MCPEDL's addons are on CurseForge too). Addons installed from CurseForge are linked automatically; for others, use <b>Link to CurseForge…</b> on the addon. Needs a CurseForge API key (Settings → Integrations).</p>
             <p class="warn-banner" id="addonStopNote" hidden>The server is running. Stop it to add, update, switch or remove mods (Valheim keeps mod files locked while it runs).</p>
             <p class="muted small-text" id="addonRestart" hidden>Restart the server to load changes.</p>
             <div id="addonList" class="addon-list"></div>
@@ -803,6 +812,15 @@
       <a href="https://github.com/Volatile111/tavern-host/releases" target="_blank" rel="noopener" class="small-text">All releases</a>
       <div class="spacer"></div><button class="primary" id="whatsNewClose">Got it</button>
     </div>
+  </div>
+</dialog>
+
+<dialog id="pickDialog" class="wide-dialog">
+  <div class="dialog-body">
+    <h2 id="pickTitle"></h2>
+    <p class="muted small-text" id="pickHelp"></p>
+    <div id="pickList" class="pick-list"></div>
+    <div class="form-actions"><div class="spacer"></div><button id="pickCancel">Cancel</button></div>
   </div>
 </dialog>
 

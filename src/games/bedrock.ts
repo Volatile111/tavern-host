@@ -9,6 +9,7 @@ import { rootDir } from '../store.ts';
 import { readWorldSettings, writeWorldSettings } from './bedrock-world.ts';
 import { chatStatus, setChatRelay, chatSayCommand } from './bedrock-chat.ts';
 import { listPacks, installAddonFile, removePack, setPackEnabled, reorderPacks, packIcon, movePack, getInstallLocation, setInstallLocation, type PackLocation, type PackType } from './bedrock-addons.ts';
+import { checkPackUpdates, installPackUpdate } from './bedrock-updates.ts';
 
 const EXE = 'bedrock_server.exe';
 const LINKS_API = 'https://net-secondary.web.minecraft-services.net/api/v1.0/download/links';
@@ -391,6 +392,13 @@ export const bedrock: GameModule = {
       { label: 'CurseForge', url: 'https://www.curseforge.com/minecraft-bedrock/addons', help: 'Addons, maps and texture packs, with direct downloads.' },    ],
     list: (record) => listPacks(record.installDir, levelName(record)),
     install: (record, file, source) => installAddonFile(record.installDir, levelName(record), file, source),
+    // Updates from CurseForge for packs linked to a project (see bedrock-updates.ts).
+    checkUpdates: async (record) => (await checkPackUpdates(record.installDir, levelName(record))).labels,
+    async update(record, id) {
+      const pack = listPacks(record.installDir, levelName(record)).find((p) => p.id === id);
+      if (!pack?.curseforge) throw new Error('That addon isn’t linked to a CurseForge project. Use "Link to CurseForge" first.');
+      return installPackUpdate(record.installDir, levelName(record), pack.curseforge.projectId);
+    },
     remove: (record, id) => void removePack(record.installDir, levelName(record), id),
     setEnabled: (record, id, enabled) => setPackEnabled(record.installDir, levelName(record), id, enabled),
     reorder: (record, type, ids) => reorderPacks(record.installDir, levelName(record), type as PackType, ids),

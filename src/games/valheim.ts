@@ -176,12 +176,21 @@ export const VALHEIM_PRESETS = [
  * preset / the world's own setting.
  */
 const MODIFIERS: { key: string; name: string; label: string; help: string; levels: [string, string][] }[] = [
-  { key: 'modCombat', name: 'combat', label: 'Combat', help: 'How hard enemies hit and how much health they have.', levels: [['veryeasy', 'Very easy'], ['easy', 'Easy'], ['hard', 'Hard'], ['veryhard', 'Very hard']] },
-  { key: 'modDeathPenalty', name: 'deathpenalty', label: 'Death penalty', help: 'What players lose when they die.', levels: [['casual', 'Casual'], ['veryeasy', 'Very easy'], ['easy', 'Easy'], ['hard', 'Hard'], ['hardcore', 'Hardcore']] },
-  { key: 'modResources', name: 'resources', label: 'Resources', help: 'How much you get from mining, chopping and drops.', levels: [['muchless', 'Much less'], ['less', 'Less'], ['more', 'More'], ['muchmore', 'Much more'], ['most', 'Most']] },
-  { key: 'modRaids', name: 'raids', label: 'Raids', help: 'How often enemies raid your bases.', levels: [['none', 'None'], ['muchless', 'Much less'], ['less', 'Less'], ['more', 'More'], ['muchmore', 'Much more']] },
-  { key: 'modPortals', name: 'portals', label: 'Portals', help: 'What can go through portals.', levels: [['casual', 'Casual (everything)'], ['hard', 'Hard (no boss portals)'], ['veryhard', 'Very hard (no portals)']] },
+  // "normal" is listed too: with a preset like Hardcore, "-modifier deathpenalty normal" puts just that one back.
+  { key: 'modCombat', name: 'combat', label: 'Combat', help: 'How hard enemies hit and how much health they have.', levels: [['veryeasy', 'Very easy'], ['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard'], ['veryhard', 'Very hard']] },
+  { key: 'modDeathPenalty', name: 'deathpenalty', label: 'Death penalty', help: 'What players lose when they die.', levels: [['casual', 'Casual'], ['veryeasy', 'Very easy'], ['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard'], ['hardcore', 'Hardcore']] },
+  { key: 'modResources', name: 'resources', label: 'Resources', help: 'How much you get from mining, chopping and drops.', levels: [['muchless', 'Much less'], ['less', 'Less'], ['normal', 'Normal'], ['more', 'More'], ['muchmore', 'Much more'], ['most', 'Most']] },
+  { key: 'modRaids', name: 'raids', label: 'Raids', help: 'How often enemies raid your bases.', levels: [['none', 'None'], ['muchless', 'Much less'], ['less', 'Less'], ['normal', 'Normal'], ['more', 'More'], ['muchmore', 'Much more']] },
+  { key: 'modPortals', name: 'portals', label: 'Portals', help: 'What can go through portals.', levels: [['casual', 'Casual (everything)'], ['normal', 'Normal (no metals)'], ['hard', 'Hard (no boss portals)'], ['veryhard', 'Very hard (no portals)']] },
 ];
+/** One "Other world keys" entry: a key, optionally with a number ("nocraftcost", "skillgainrate 200"). */
+const EXTRA_KEY = /^[A-Za-z][A-Za-z0-9_]{1,40}( -?\d{1,6}(\.\d{1,3})?)?$/;
+function extraKeys(text: string): string[] {
+  return String(text ?? '')
+    .split(/[,\r\n]+/)
+    .map((k) => k.trim().replace(/\s+/g, ' '))
+    .filter(Boolean);
+}
 /** World keys (-setkey <key>): switches that change how the world plays. */
 const WORLD_KEYS: { key: string; name: string; label: string; help: string }[] = [
   { key: 'keyNoBuildCost', name: 'nobuildcost', label: 'No build cost', help: 'Building is free.' },
@@ -214,17 +223,32 @@ export const valheim: GameModule = {
     { key: 'backupShort', label: 'First backup after (minutes)', type: 'number', restart: true },
     { key: 'backupLong', label: 'Then back up every (minutes)', type: 'number', restart: true },
     { key: 'saveDir', label: 'Save folder', type: 'folder', help: 'Worlds, backups and the admin/ban/allow lists live here.', restart: true },
-    ...MODIFIERS.map((m) => ({
+    ...MODIFIERS.map((m, i) => ({
       key: m.key,
-      label: `World modifier: ${m.label}`,
+      label: m.label,
       type: 'select' as const,
-      help: `${m.help} Applied on top of the difficulty preset (Settings → Difficulty).`,
-      options: [{ value: '', label: 'Default (from the preset)' }, ...m.levels.map(([value, label]) => ({ value, label }))],
+      help: m.help,
+      options: [{ value: '', label: 'Default (what the preset gives)' }, ...m.levels.map(([value, label]) => ({ value, label }))],
       restart: true,
+      section: 'World modifiers',
+      ...(i === 0
+        ? {
+            sectionHelp:
+              'Like a .bat file: start from any difficulty preset (Settings → Difficulty), then change any of these on top of it. "Default" keeps what the preset gives. Applied each time the server starts.',
+          }
+        : {}),
     })),
-    ...WORLD_KEYS.map((k) => ({ key: k.key, label: `World setting: ${k.label}`, type: 'boolean' as const, help: k.help, restart: true })),
-    { key: 'instanceId', label: 'Instance ID', type: 'text', help: 'Only needed when several servers run from the same install folder: give each a different ID (letters and numbers).', restart: true },
-    { key: 'extraArgs', label: 'Extra launch arguments', type: 'text', help: 'Anything else to add to the server’s command line (e.g. for mods). Settings above always win over the same argument here.', restart: true },
+    ...WORLD_KEYS.map((k) => ({ key: k.key, label: k.label, type: 'boolean' as const, help: k.help, restart: true, section: 'World modifiers' })),
+    {
+      key: 'extraKeys',
+      label: 'Other world keys (-setkey)',
+      type: 'text',
+      help: 'Any other world key, separated by commas, each with a number if it takes one. Example: nocraftcost, skillgainrate 200. Each one is passed as -setkey, exactly like in a .bat file.',
+      restart: true,
+      section: 'World modifiers',
+    },
+    { key: 'instanceId', label: 'Instance ID', type: 'text', help: 'Only needed when several servers run from the same install folder: give each a different ID (letters and numbers).', restart: true, section: 'Advanced' },
+    { key: 'extraArgs', label: 'Extra launch arguments', type: 'text', help: 'Anything else to add to the server’s command line (e.g. for mods). Settings above always win over the same argument here.', restart: true, section: 'Advanced' },
   ],
 
   defaults: ({ installDir }) => ({
@@ -262,6 +286,10 @@ export const valheim: GameModule = {
     }
     const keys: Settings = {};
     for (const k of WORLD_KEYS) if (s[k.key] === true || s[k.key] === 'true') keys[k.key] = true;
+    const keyList = extraKeys(String(s.extraKeys ?? ''));
+    if (keyList.length > 30) throw new Error('Other world keys: at most 30.');
+    const badKey = keyList.find((k) => !EXTRA_KEY.test(k));
+    if (badKey) throw new Error(`Other world keys: "${badKey}" isn't a world key. Use a name, optionally with a number, e.g. skillgainrate 200.`);
     const instanceId = String(s.instanceId ?? '').trim();
     if (instanceId && !/^[\w-]{1,32}$/.test(instanceId)) throw new Error('Instance ID can only use letters, numbers, - and _ (up to 32).');
     const extraArgs = String(s.extraArgs ?? '').trim();
@@ -285,6 +313,7 @@ export const valheim: GameModule = {
       ...(VALHEIM_PRESETS.some((p) => p.value === s.preset) && s.preset !== 'keep' ? { preset: String(s.preset) } : {}),
       ...modifiers,
       ...keys,
+      ...(keyList.length ? { extraKeys: keyList.join(', ') } : {}),
       ...(instanceId ? { instanceId } : {}),
       ...(extraArgs ? { extraArgs } : {}),
       // Only used once, by install() for a brand-new server.
@@ -316,6 +345,7 @@ export const valheim: GameModule = {
     if (s.preset) args.push('-preset', String(s.preset));
     for (const m of MODIFIERS) if (s[m.key]) args.push('-modifier', m.name, String(s[m.key]));
     for (const k of WORLD_KEYS) if (s[k.key] === true) args.push('-setkey', k.name);
+    for (const k of extraKeys(String(s.extraKeys ?? ''))) args.push('-setkey', k.toLowerCase());
     if (s.instanceId) args.push('-instanceid', String(s.instanceId));
     if (s.extraArgs) args.push(...splitArgs(String(s.extraArgs)));
     mkdirSync(saveDir(record), { recursive: true });

@@ -3,7 +3,8 @@ import { readFileSync, existsSync, writeFileSync, createWriteStream, createReadS
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
-import { curseforgeKey, setCurseforgeKey, searchProjects, latestFile } from './curseforge.ts';
+import { curseforgeKey, setCurseforgeKey, searchProjects, latestFile, newestFile } from './curseforge.ts';
+import { linkPacks, unlinkPack, getUpdateSettings, setUpdateSettings } from './games/bedrock-addons.ts';
 import { downloadNexus, nexusPackage } from './nexus.ts';
 import { nexusKey, nexusUser, setNexusKey, NEXUS_APP } from './nexus-key.ts';
 import { downloadFile } from './download.ts';
@@ -1358,11 +1359,69 @@ route('POST', '/api/servers/:id/addons/curseforge', async (ctx) => {
     const local = path.join(dir, path.basename(file.fileName).replace(/[^\w.\- ]/g, '_'));
     await downloadFile(file.downloadUrl, local);
     const result = await addons.install(inst.record, local, `CurseForge: ${file.name}`);
+    // Bedrock: remember where these packs came from, for update checks.
+    const uuids = (result as { uuids?: string[] }).uuids;
+    if (inst.record.game === 'bedrock' && uuids?.length) {
+      linkPacks(inst.record.installDir, uuids, { projectId: Number(projectId), name: file.name, url: file.projectUrl, fileId: file.fileId, fileDate: file.fileDate });
+    }
     audit(p, `installed "${file.name}" from CurseForge on "${inst.record.name}"`);
     return { ...result, running: inst.isRunning };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ---------- Bedrock addon updates (CurseForge) ----------
+
+function bedrockAddons(id: string) {
+  const { inst, addons } = addonsOf(id);
+  if (inst.record.game !== 'bedrock') throw new HttpError(404, 'Addon links and update settings are for Bedrock servers.');
+  return { inst, addons };
+}
+
+// Body: {"projectId": 123} links the pack (and the other packs from the same file) to that CurseForge project; the
+// installed file counts as the version from that moment, so newer files on CurseForge show as updates. {"projectId": null} unlinks.
+route('POST', '/api/servers/:id/addons/:pack/curseforge', async (ctx) => {
+  const p = needServer(ctx, 'addons.manage', ctx.params[0]);
+  const { inst, addons } = bedrockAddons(ctx.params[0]);
+  const pack = (addons.list(inst.record) as { id: string; uuid: string; name: string; installedAt: number | null }[]).find((x) => x.id === ctx.params[1]);
+  if (!pack) throw new HttpError(404, 'That addon is not installed.');
+  const { projectId } = await readBody(ctx.req);
+  if (projectId === null) {
+    unlinkPack(inst.record.installDir, pack.uuid);
+    audit(p, `unlinked addon "${pack.name}" from CurseForge on "${inst.record.name}"`);
+    return { packs: addons.list(inst.record) };
+  }
+  const id = Number(projectId);
+  if (!Number.isInteger(id) || id <= 0) throw new HttpError(400, 'Pick a CurseForge project.');
+  const latest = await newestFile(id, 'alpha').catch((err) => {
+    throw new HttpError(400, (err as Error).message);
+  });
+  // Packs installed from the same file (e.g. its behavior and resource pack) share the link.
+  const same = (addons.list(inst.record) as { uuid: string; installedAt: number | null }[]).filter((x) => x.installedAt && pack.installedAt && Math.abs(x.installedAt - pack.installedAt) < 5000).map((x) => x.uuid);
+  linkPacks(inst.record.installDir, [...new Set([pack.uuid, ...same])], { projectId: id, name: latest.name, url: latest.url, fileId: null, fileDate: new Date(pack.installedAt ?? Date.now()).toISOString() });
+  audit(p, `linked addon "${pack.name}" to CurseForge project "${latest.name}" on "${inst.record.name}"`);
+  return { packs: addons.list(inst.record) };
+});
+
+route('GET', '/api/servers/:id/addons/update-settings', async (ctx) => {
+  needServer(ctx, 'view', ctx.params[0]);
+  const { inst } = bedrockAddons(ctx.params[0]);
+  return getUpdateSettings(inst.record.installDir);
+});
+
+// Body: {"channel": "release" | "beta" | "alpha", "auto": true}.
+route('PUT', '/api/servers/:id/addons/update-settings', async (ctx) => {
+  const p = needServer(ctx, 'addons.manage', ctx.params[0]);
+  const { inst } = bedrockAddons(ctx.params[0]);
+  let next;
+  try {
+    next = setUpdateSettings(inst.record.installDir, await readBody(ctx.req));
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+  audit(p, `set addon updates on "${inst.record.name}" to ${next.channel}${next.auto ? ', automatic' : ''}`);
+  return next;
 });
 
 // Valheim: install a Nexus Mods file. Body: {"input": "nxm://valheim/mods/…" | "https://www.nexusmods.com/valheim/mods/…"}.
@@ -2622,6 +2681,36 @@ startHealthChecks();
 startWorldChecks();
 startUpdateChecks();
 startAppUpdateChecks();
+// Bedrock addons with "Update automatically" on: checked against CurseForge every 6 hours (the first time 10 minutes
+// after start). A pack update is loaded the next time the server starts.
+async function autoUpdateAddons() {
+  if (!curseforgeKey()) return;
+  for (const inst of listInstances()) {
+    if (inst.record.game !== 'bedrock' || !getUpdateSettings(inst.record.installDir).auto) continue;
+    const addons = inst.module.addons!;
+    try {
+      const labels = await addons.checkUpdates!(inst.record);
+      const packs = addons.list(inst.record) as { id: string; name: string; curseforge: { projectId: number } | null }[];
+      const done = new Set<number>();
+      for (const id of Object.keys(labels)) {
+        const pack = packs.find((x) => x.id === id);
+        if (!pack?.curseforge || done.has(pack.curseforge.projectId)) continue;
+        done.add(pack.curseforge.projectId);
+        try {
+          await addons.update!(inst.record, id);
+          inst.log(`Addon updated from CurseForge: ${pack.name} → ${labels[id]}${inst.isRunning ? ' (loaded at the next restart)' : ''}.`);
+          logActivity({ at: Date.now(), who: 'Tavern Host', kind: 'system', id: inst.id, what: `updated addon "${pack.name}" to ${labels[id]} on "${inst.record.name}" (automatic)` });
+        } catch (err) {
+          inst.log(`Couldn't update addon ${pack.name}: ${(err as Error).message}`);
+        }
+      }
+    } catch (err) {
+      inst.log(`Couldn't check addon updates: ${(err as Error).message}`);
+    }
+  }
+}
+setTimeout(() => autoUpdateAddons().catch(() => {}), 10 * 60_000).unref();
+setInterval(() => autoUpdateAddons().catch(() => {}), 6 * 3600_000).unref();
 startNodes();
 http.createServer((req, res) => handle(req, res, false)).listen(config.port, '127.0.0.1', () => {
   console.log(`Panel running at http://127.0.0.1:${config.port}`);

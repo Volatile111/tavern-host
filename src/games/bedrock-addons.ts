@@ -37,6 +37,8 @@ export interface PackInfo {
   managed: boolean;
   installedAt: number | null;
   source: string | null;
+  /** The CurseForge project this pack is linked to (for update checks). */
+  curseforge: { projectId: number; name: string; url: string | null } | null;
   minEngine: number[] | null;
   /** Version/experiment problems (e.g. needs a newer Bedrock than the server runs). */
   warnings: { level: 'error' | 'warn'; text: string }[];
@@ -44,10 +46,21 @@ export interface PackInfo {
   typeClass: string;
 }
 
+/** The CurseForge project a pack comes from, and the file installed (fileDate: newer files count as updates). */
+export interface CurseforgeLink {
+  projectId: number;
+  name: string;
+  url: string | null;
+  fileId: number | null;
+  fileDate: string;
+}
+
 interface Registry {
-  packs: Record<string, { installedAt: number; source: string | null }>;
+  packs: Record<string, { installedAt: number; source: string | null; curseforge?: CurseforgeLink }>;
   /** Where new addons go. */
   location?: PackLocation;
+  /** Addon updates from CurseForge: which files count (release / + beta / + alpha) and whether to install them by itself. */
+  updates?: { channel: 'release' | 'beta' | 'alpha'; auto: boolean };
 }
 
 const REGISTRY_FILE = '.tavernhost-addons.json';
@@ -322,6 +335,7 @@ export function listPacks(installDir: string, level: string): PackInfo[] {
           managed: !!managed,
           installedAt: managed?.installedAt ?? null,
           source: managed?.source ?? null,
+          curseforge: managed?.curseforge ? { projectId: managed.curseforge.projectId, name: managed.curseforge.name, url: managed.curseforge.url } : null,
           warnings: packWarnings(m, server, betaOn),
           typeLabel: type === 'behavior' ? 'Behavior pack' : 'Resource pack',
           typeClass: type,
@@ -409,9 +423,57 @@ function safeFolderName(name: string, uuid: string) {
   return `${base}_${uuid.slice(0, 8)}`;
 }
 
+// ---------- CurseForge links and update settings ----------
+
+/** Links packs (e.g. a behavior + resource pack from one .mcaddon) to a CurseForge project. */
+export function linkPacks(installDir: string, uuids: string[], link: CurseforgeLink) {
+  const reg = loadRegistry(installDir);
+  for (const uuid of uuids) reg.packs[uuid] = { ...(reg.packs[uuid] ?? { installedAt: Date.now(), source: `CurseForge: ${link.name}` }), curseforge: link };
+  saveRegistry(installDir, reg);
+}
+
+/** Removes a pack's CurseForge link (and that of the other packs from the same project). */
+export function unlinkPack(installDir: string, uuid: string) {
+  const reg = loadRegistry(installDir);
+  const projectId = reg.packs[uuid]?.curseforge?.projectId;
+  for (const entry of Object.values(reg.packs)) if (projectId && entry.curseforge?.projectId === projectId) delete entry.curseforge;
+  saveRegistry(installDir, reg);
+}
+
+/** Every linked CurseForge project with the packs (UUIDs) that came from it. */
+export function linkedProjects(installDir: string): { link: CurseforgeLink; uuids: string[] }[] {
+  const byProject = new Map<number, { link: CurseforgeLink; uuids: string[] }>();
+  for (const [uuid, entry] of Object.entries(loadRegistry(installDir).packs)) {
+    const l = entry.curseforge;
+    if (!l) continue;
+    const g = byProject.get(l.projectId) ?? { link: l, uuids: [] };
+    g.uuids.push(uuid);
+    // The newest record of the installed file wins (packs of one project are updated together).
+    if (l.fileDate > g.link.fileDate) g.link = l;
+    byProject.set(l.projectId, g);
+  }
+  return [...byProject.values()];
+}
+
+export function getUpdateSettings(installDir: string): { channel: 'release' | 'beta' | 'alpha'; auto: boolean } {
+  return { channel: 'release', auto: false, ...loadRegistry(installDir).updates };
+}
+
+export function setUpdateSettings(installDir: string, input: { channel?: unknown; auto?: unknown }) {
+  const reg = loadRegistry(installDir);
+  const current = getUpdateSettings(installDir);
+  const channel = input.channel === undefined ? current.channel : String(input.channel);
+  if (!['release', 'beta', 'alpha'].includes(channel)) throw new Error('Pick release, beta or alpha.');
+  reg.updates = { channel: channel as 'release' | 'beta' | 'alpha', auto: input.auto === undefined ? current.auto : !!input.auto };
+  saveRegistry(installDir, reg);
+  return reg.updates;
+}
+
 export interface InstallResult {
   installed: { name: string; type: PackType; version: string; action: 'installed' | 'updated' | 'reinstalled'; location: string }[];
   warnings: string[];
+  /** UUIDs of the packs in the file (to link them to where they came from). */
+  uuids?: string[];
 }
 
 /**
@@ -466,7 +528,9 @@ export async function installAddonFile(installDir: string, level: string, file: 
         cpSync(dir, dest, { recursive: true });
       }
       setEnabledIn(installDir, level, m.type, m.uuid, m.version);
-      reg.packs[m.uuid] = { installedAt: Date.now(), source };
+      // Keep its CurseForge link through updates.
+      reg.packs[m.uuid] = { ...reg.packs[m.uuid], installedAt: Date.now(), source };
+      (result.uuids ??= []).push(m.uuid);
       const old = copies[0];
       const action = !old ? 'installed' : compareVersions(m.version, old.version) > 0 ? 'updated' : 'reinstalled';
       result.installed.push({ name: m.name, type: m.type, version: versionText(m.version), action, location: targets.map((t) => t.location).join(' + ') });

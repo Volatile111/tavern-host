@@ -85,6 +85,41 @@ interface RawFile {
   downloadUrl: string | null;
   fileDate: string;
   gameVersions?: string[];
+  /** 1 = release, 2 = beta, 3 = alpha. */
+  releaseType?: number;
+}
+
+/** Which files count when looking for updates: releases only, or betas / alphas too (when they're the newest). */
+export type Channel = 'release' | 'beta' | 'alpha';
+const CHANNEL_TYPES: Record<Channel, number[]> = { release: [1], beta: [1, 2], alpha: [1, 2, 3] };
+export const RELEASE_TYPE_NAME: Record<number, string> = { 1: 'release', 2: 'beta', 3: 'alpha' };
+
+export interface CfFile {
+  id: number;
+  displayName: string;
+  fileName: string;
+  fileDate: string;
+  releaseType: number;
+  downloadUrl: string | null;
+}
+
+/**
+ * A project's newest file on a channel. The newest file among the allowed types wins, so a beta or alpha is only
+ * picked when it's newer than the newest release. downloadUrl is null when the author doesn't allow other apps to
+ * download (then the project page is the only way).
+ */
+export async function newestFile(modId: number, channel: Channel): Promise<{ name: string; url: string | null; file: CfFile | null }> {
+  const mod = await cf<RawMod>(`/mods/${modId}`);
+  const files = await cf<RawFile[]>(`/mods/${modId}/files?pageSize=50`);
+  const allowed = CHANNEL_TYPES[channel] ?? CHANNEL_TYPES.release;
+  const pick = files.filter((f) => allowed.includes(f.releaseType ?? 1)).sort((a, b) => b.fileDate.localeCompare(a.fileDate))[0];
+  return {
+    name: mod.name,
+    url: mod.links?.websiteUrl ?? null,
+    file: pick
+      ? { id: pick.id, displayName: pick.displayName, fileName: pick.fileName, fileDate: pick.fileDate, releaseType: pick.releaseType ?? 1, downloadUrl: mod.allowModDistribution === false ? null : pick.downloadUrl }
+      : null,
+  };
 }
 
 function toProject(m: RawMod): CfProject {
@@ -113,10 +148,17 @@ export async function searchProjects(slug: string, query: string, page = 0): Pro
 }
 
 /** The newest file of a project and where to download it (null download = author disabled third-party downloads). */
-export async function latestFile(modId: number): Promise<{ name: string; fileName: string; downloadUrl: string | null; projectUrl: string | null }> {
+export async function latestFile(modId: number): Promise<{ name: string; fileName: string; downloadUrl: string | null; projectUrl: string | null; fileId: number; fileDate: string }> {
   const mod = await cf<RawMod>(`/mods/${modId}`);
   const files = await cf<RawFile[]>(`/mods/${modId}/files?pageSize=20`);
   const newest = [...files].sort((a, b) => b.fileDate.localeCompare(a.fileDate))[0];
   if (!newest) throw new Error('That project has no files to download.');
-  return { name: mod.name, fileName: newest.fileName, downloadUrl: mod.allowModDistribution === false ? null : newest.downloadUrl, projectUrl: mod.links?.websiteUrl ?? null };
+  return {
+    name: mod.name,
+    fileName: newest.fileName,
+    downloadUrl: mod.allowModDistribution === false ? null : newest.downloadUrl,
+    projectUrl: mod.links?.websiteUrl ?? null,
+    fileId: newest.id,
+    fileDate: newest.fileDate,
+  };
 }

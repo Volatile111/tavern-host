@@ -2,6 +2,11 @@
 
 ## Tavern Host 0.5.4
 
+**New**
+- **Bedrock addon updates from CurseForge.** Addons installed from CurseForge are linked to their project automatically; for others (from MCPEDL or elsewhere), use **Link to CurseForge…** on the addon. **Check for updates** then finds newer files, on the channel you pick: releases only, releases + beta, or releases + beta + alpha (betas and alphas only when they're newer than the newest release). **Update automatically** checks every 6 hours and installs them by itself (loaded at the next restart). Needs a CurseForge API key in Settings → Integrations.
+- **Valheim world modifiers, fully customisable**, like a .bat file: start from any difficulty preset and change any modifier on top of it, now including **Normal** (e.g. Hardcore with a normal death penalty). The world settings are grouped under **World modifiers** in Settings, and **Other world keys** passes any other key with -setkey (e.g. nocraftcost, skillgainrate 200).
+- Valheim with crossplay on: Tavern Host explains that the local IP can't be used to join (Valheim's crossplay only finds the server by its public address), and what to use instead.
+
 **Fixed**
 - Security: Tavern Vault calls that would hand out something secret (for example an encryption recovery key, a password or a token) always need **Manage storage**, even when they're named like a read-only call.
 

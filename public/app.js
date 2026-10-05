@@ -856,7 +856,16 @@ function renderConnStrip() {
     return chip;
   };
   if (c?.port) {
-    strip.appendChild(copyChip('IP:', c.ip, "This system's address on your network. Click to copy. Players outside your network need your public IP and a port forward."));
+    const crossplay = d.game === 'valheim' && (d.settings?.crossplay === true || d.settings?.crossplay === 'true');
+    strip.appendChild(
+      copyChip(
+        'IP:',
+        c.ip,
+        crossplay
+          ? "This system's address on your network. With crossplay on, Valheim can't be joined by this address, even on your own network: use the join code or your public IP (or turn crossplay off). Click to copy."
+          : "This system's address on your network. Click to copy. Players outside your network need your public IP and a port forward.",
+      ),
+    );
     strip.appendChild(copyChip('Port:', c.port, `${c.protocol} port. Click to copy.`));
   }
   const running = d.status === 'running';
@@ -1624,7 +1633,16 @@ function renderSettings() {
   box.innerHTML = '';
   // Games whose settings live in their own file (Bedrock: Properties tab) have no panel fields.
   box.closest('.card').hidden = !game.fields.length;
+  let section = null;
   for (const f of game.fields) {
+    // Fields can be grouped under a heading (e.g. Valheim's world modifiers).
+    if (f.section && f.section !== section) {
+      section = f.section;
+      const head = el('div', 'full field-section');
+      head.appendChild(el('h4', 'section-label', f.section));
+      if (f.sectionHelp) head.appendChild(el('p', 'muted small-text', f.sectionHelp));
+      box.appendChild(head);
+    }
     const wrap = el('div', f.type === 'boolean' || f.type === 'folder' ? 'full' : '');
     const id = `f_${f.key}`;
     if (f.type === 'boolean') {
@@ -4982,6 +5000,7 @@ async function loadAddons() {
   renderAddonSites();
   renderAddonLocation();
   $('addonCheckUpdates').hidden = !addonState.canCheckUpdates || !hasPerm('addons.manage');
+  loadAddonUpdateSettings();
   $('addonStopNote').hidden = !(addonState.needsStopped && addonState.running);
   $('addonShareCard').hidden = !addonState.share || addonState.moddingOff;
   if (addonState.share && !addonState.moddingOff) loadShare();
@@ -5082,6 +5101,105 @@ function renderAddonStatus() {
 }
 
 let addonUpdates = {};
+
+/** Shows a list to choose from; resolves to the chosen item, or null if cancelled. */
+function pick(title, help, items, describe) {
+  return new Promise((resolve) => {
+    const dialog = $('pickDialog');
+    $('pickTitle').textContent = title;
+    $('pickHelp').textContent = help;
+    const list = $('pickList');
+    list.innerHTML = '';
+    let chosen = null;
+    for (const item of items) {
+      const d = describe(item);
+      const b = el('button', 'ghost');
+      b.type = 'button';
+      if (d.image) {
+        const img = el('img');
+        img.src = d.image;
+        img.alt = '';
+        b.appendChild(img);
+      }
+      const text = el('span', null, d.title);
+      if (d.sub) text.appendChild(el('span', 'pick-sub', d.sub));
+      b.appendChild(text);
+      b.addEventListener('click', () => {
+        chosen = item;
+        dialog.close();
+      });
+      list.appendChild(b);
+    }
+    if (!items.length) list.appendChild(el('p', 'muted', 'Nothing found.'));
+    $('pickCancel').onclick = () => dialog.close();
+    dialog.addEventListener('close', () => resolve(chosen), { once: true });
+    dialog.showModal();
+  });
+}
+
+// Bedrock: link an addon to its CurseForge project, so "Check for updates" can find newer files.
+async function linkCurseforge(p, packUrl) {
+  const query = await ask(`Search CurseForge for "${p.name}". Change the search if it's listed under another name:`, p.name.replace(/\b(BP|RP|behaviou?r|resource)\b/gi, '').replace(/\s+/g, ' ').trim());
+  if (!query) return;
+  let found;
+  try {
+    found = await api('GET', `/api/servers/${state.selected}/addons/curseforge/search?q=${encodeURIComponent(query)}`);
+  } catch (err) {
+    return toast(err.message, true);
+  }
+  const project = await pick(
+    `Which one is "${p.name}"?`,
+    'The version installed now counts as current; newer files on CurseForge will show as updates. MCPEDL addons are usually on CurseForge under the same name.',
+    found.results,
+    (r) => ({ title: r.name, sub: [r.author ? `by ${r.author}` : null, `${r.downloads.toLocaleString()} downloads`, r.summary].filter(Boolean).join(' · '), image: r.thumbnail }),
+  );
+  if (!project) return;
+  try {
+    const r = await api('POST', `${packUrl}/curseforge`, { projectId: project.id });
+    addonState.packs = r.packs;
+    toast(`Linked to ${project.name}. Use "Check for updates" to look for newer versions.`);
+    renderAddons();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function unlinkCurseforge(p, packUrl) {
+  if (!confirm(`Stop checking CurseForge for updates to "${p.name}"? (The addon stays installed.)`)) return;
+  try {
+    const r = await api('POST', `${packUrl}/curseforge`, { projectId: null });
+    addonState.packs = r.packs;
+    renderAddons();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+// Bedrock update settings (channel, automatic), loaded once per server.
+async function loadAddonUpdateSettings() {
+  const show = state.detail?.game === 'bedrock' && addonState.canCheckUpdates;
+  $('addonUpdateSettings').hidden = !show || !hasPerm('addons.manage');
+  $('addonUpdateHelp').hidden = !show;
+  if (!show || addonState.updateSettingsFor === state.selected) return;
+  addonState.updateSettingsFor = state.selected;
+  try {
+    const s = await api('GET', `/api/servers/${state.selected}/addons/update-settings`);
+    $('addonChannel').value = s.channel;
+    $('addonAutoUpdate').checked = s.auto;
+  } catch {}
+}
+async function saveAddonUpdateSettings() {
+  try {
+    const s = await api('PUT', `/api/servers/${state.selected}/addons/update-settings`, { channel: $('addonChannel').value, auto: $('addonAutoUpdate').checked });
+    toast(`Addon updates: ${{ release: 'releases only', beta: 'releases + beta', alpha: 'releases + beta + alpha' }[s.channel]}${s.auto ? ', installed automatically' : ''}`);
+    addonUpdates = {};
+    renderAddons();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+$('addonChannel').addEventListener('change', saveAddonUpdateSettings);
+$('addonAutoUpdate').addEventListener('change', saveAddonUpdateSettings);
 $('addonCheckUpdates').addEventListener('click', async () => {
   const btn = $('addonCheckUpdates');
   btn.disabled = true;
@@ -5423,6 +5541,17 @@ function addonRow(p, compact = false) {
   // Incompatible items are installed switched off, but the owner can still force them on.
   const incompatible = p.warnings?.some((w) => w.level === 'error');
   if (incompatible) name.appendChild(el('span', `type-badge ${p.enabled ? 'forced' : 'bad'}`, p.enabled ? 'Forced on' : 'Incompatible'));
+  // Bedrock: linked to a CurseForge project (for update checks).
+  if (p.curseforge && !compact) {
+    const cf = el('a', 'type-badge curseforge', 'CurseForge');
+    cf.title = `Updates come from CurseForge: ${p.curseforge.name}`;
+    if (p.curseforge.url) {
+      cf.href = p.curseforge.url;
+      cf.target = '_blank';
+      cf.rel = 'noopener';
+    }
+    name.appendChild(cf);
+  }
   info.appendChild(name);
   if (p.description) {
     const desc = el('div', 'sub desc', p.description);
@@ -5450,6 +5579,8 @@ function addonRow(p, compact = false) {
         try {
           const r = await api('POST', `${packUrl}/update`);
           delete addonUpdates[p.id];
+          // Bedrock: the other packs from the same CurseForge project were updated with it.
+          if (p.curseforge) for (const q of addonState.packs) if (q.curseforge?.projectId === p.curseforge.projectId) delete addonUpdates[q.id];
           addonState.packs = r.packs;
           showInstallResult(r);
           renderAddons();
@@ -5460,6 +5591,13 @@ function addonRow(p, compact = false) {
         }
       });
       actions.appendChild(up);
+    }
+    // Bedrock: link to a CurseForge project (so updates can be found), or remove the link.
+    if (state.detail.game === 'bedrock' && !compact) {
+      const link = el('button', 'small ghost', p.curseforge ? 'Unlink' : 'Link to CurseForge…');
+      link.title = p.curseforge ? `Stop checking ${p.curseforge.name} on CurseForge for updates` : 'Find this addon on CurseForge so Tavern Host can update it';
+      link.addEventListener('click', () => (p.curseforge ? unlinkCurseforge(p, packUrl) : linkCurseforge(p, packUrl)));
+      actions.appendChild(link);
     }
     // Who needs it (Valheim): server + players / server only / players only.
     if (addonState.sides && p.side) {

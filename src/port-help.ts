@@ -99,6 +99,9 @@ export async function portHelp(record: ServerRecord, connection: { port: number 
     forwards.push({ protocol: 'TCP & UDP', ports: `${p}-${p + 1}`, why: 'The game port and the one after it. UDP is what the game uses; forwarding TCP as well is harmless and what many guides suggest.' });
     if (record.settings.crossplay === true || record.settings.crossplay === 'true') {
       notes.push('Crossplay is on: players can also join with the join code, which goes through a relay and needs no port forward (so joining by code works even without the forward).');
+      notes.push(
+        "Crossplay is on, so players on your own network can't join by this system's local IP: Valheim's crossplay finds the server through its public address only. They can use the join code or the public IP. If nobody plays on Xbox or Game Pass, turning crossplay off makes the local IP work again.",
+      );
     }
     notes.push('Players join from the Join Game tab → Add server, with your public IP and port.');
   } else if (port) {

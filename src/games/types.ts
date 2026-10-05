@@ -10,6 +10,10 @@ export interface SettingField {
   label: string;
   type: 'text' | 'password' | 'number' | 'boolean' | 'folder' | 'select';
   help?: string;
+  /** Heading this field is grouped under in Settings (shown once, above the first field of the group). */
+  section?: string;
+  /** Explanation shown under the heading (set on the group's first field). */
+  sectionHelp?: string;
   /** For 'select'. */
   options?: { value: string; label: string; help?: string }[];
   /** For 'select': options come from the game's listVersions() for the value of another field (e.g. the flavor). */
