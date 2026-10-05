@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { curseforgeKey, setCurseforgeKey, searchProjects, latestFile, newestFile } from './curseforge.ts';
 import { linkPacks, unlinkPack, getUpdateSettings, setUpdateSettings } from './games/bedrock-addons.ts';
+import { listProxyServers, addProxyServer, removeProxyServer, setDefaultProxyServer, proxyName, prepareBackend } from './games/bungee-network.ts';
 import { downloadNexus, nexusPackage } from './nexus.ts';
 import { nexusKey, nexusUser, setNexusKey, NEXUS_APP } from './nexus-key.ts';
 import { downloadFile } from './download.ts';
@@ -1391,6 +1392,95 @@ route('POST', '/api/servers/:id/addons/by-id', async (ctx) => {
   return { ...result, packs: addons.list(inst.record), running: inst.isRunning };
 });
 
+// ---------- BungeeCord network (the servers behind a proxy) ----------
+
+function proxyOf(id: string) {
+  const inst = getInstance(id);
+  if (inst.record.game !== 'java' || inst.record.settings.flavor !== 'bungeecord') throw new HttpError(404, 'That server is not a BungeeCord proxy.');
+  return inst;
+}
+
+/** Tavern Host's Minecraft Java servers that could go behind this proxy (this system's and the nodes'), with their address. */
+function proxyCandidates(p: Principal, proxyId: string) {
+  const local = listInstances()
+    .filter((i) => i.id !== proxyId && i.record.game === 'java' && i.record.settings.flavor !== 'bungeecord' && can(p, 'view', i.id))
+    .map((i) => {
+      const port = i.module.connection?.(i.record)?.port ?? 25565;
+      return { id: i.id, name: i.record.name, flavor: String(i.record.settings.flavor), address: `127.0.0.1:${port}`, node: null as string | null, suggested: proxyName(i.record.name), canPrepare: ['paper', 'spigot'].includes(String(i.record.settings.flavor)) };
+    });
+  const remote = (remoteServers() as { id: string; name: string; game: string; settings?: Record<string, unknown>; connection?: { ip?: string; port?: number }; node?: { name?: string } }[])
+    .filter((s) => s.game === 'java' && s.settings?.flavor !== 'bungeecord' && s.connection?.ip && s.connection?.port && can(p, 'view', s.id))
+    .map((s) => ({ id: s.id, name: s.name, flavor: String(s.settings?.flavor ?? ''), address: `${s.connection!.ip}:${s.connection!.port}`, node: s.node?.name ?? 'node', suggested: proxyName(s.name), canPrepare: false }));
+  return [...local, ...remote];
+}
+
+route('GET', '/api/servers/:id/network', async (ctx) => {
+  const p = needServer(ctx, 'view', ctx.params[0]);
+  const inst = proxyOf(ctx.params[0]);
+  let current;
+  try {
+    current = listProxyServers(inst.record);
+  } catch (err) {
+    return { servers: [], priorities: [], candidates: proxyCandidates(p, inst.id), error: (err as Error).message };
+  }
+  return { ...current, candidates: proxyCandidates(p, inst.id), running: inst.isRunning };
+});
+
+// Body: {"serverId"?: "<a Tavern Host server>", "name": "survival", "address"?: "host:port", "first"?: true, "prepare"?: true}.
+// With serverId the address is filled in; prepare also sets that (Paper/Spigot) server up for the proxy.
+route('POST', '/api/servers/:id/network', async (ctx) => {
+  const p = needServer(ctx, 'properties.edit', ctx.params[0]);
+  const inst = proxyOf(ctx.params[0]);
+  const body = await readBody(ctx.req);
+  let address = String(body.address ?? '');
+  const notes: string[] = [];
+  if (body.serverId) {
+    const c = proxyCandidates(p, inst.id).find((x) => x.id === String(body.serverId));
+    if (!c) throw new HttpError(404, 'That server is not one of your Minecraft Java servers.');
+    address = c.address;
+    if (body.prepare) {
+      if (!c.canPrepare) throw new HttpError(400, 'Only Paper and Spigot servers on this system can be set up for BungeeCord automatically.');
+      needServer(ctx, 'properties.edit', c.id);
+      notes.push(...prepareBackend(getInstance(c.id).record));
+      if (getInstance(c.id).isRunning) notes.push(`Restart ${c.name} to apply that.`);
+    }
+  }
+  try {
+    addProxyServer(inst.record, { name: String(body.name ?? ''), address, first: !!body.first, motd: body.motd ? String(body.motd) : undefined });
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+  if (inst.isRunning) notes.push('Restart the proxy to load the change.');
+  audit(p, `added ${body.name} (${address}) to BungeeCord "${inst.record.name}"`);
+  return { ...listProxyServers(inst.record), notes };
+});
+
+route('DELETE', '/api/servers/:id/network/:name', async (ctx) => {
+  const p = needServer(ctx, 'properties.edit', ctx.params[0]);
+  const inst = proxyOf(ctx.params[0]);
+  try {
+    removeProxyServer(inst.record, ctx.params[1]);
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+  audit(p, `removed ${ctx.params[1]} from BungeeCord "${inst.record.name}"`);
+  return listProxyServers(inst.record);
+});
+
+// Body: {"name": "survival"}: the server players land on first.
+route('PUT', '/api/servers/:id/network/default', async (ctx) => {
+  const p = needServer(ctx, 'properties.edit', ctx.params[0]);
+  const inst = proxyOf(ctx.params[0]);
+  const { name } = await readBody(ctx.req);
+  try {
+    setDefaultProxyServer(inst.record, String(name ?? ''));
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+  audit(p, `made ${name} the first server of BungeeCord "${inst.record.name}"`);
+  return listProxyServers(inst.record);
+});
+
 // ---------- Bedrock addon updates (CurseForge) ----------
 
 function bedrockAddons(id: string) {
@@ -2480,6 +2570,7 @@ function permFor(method: string, sub: string): { server?: ServerPerm; also?: Ser
     [/^\/(update|bedrock-update|game-update)$/, 'view', 'server.update'],
     [/^\/difficulty$/, 'view', 'settings.edit'],
     [/^\/ports$/, 'view', null],
+    [/^\/network(\/[^/]+)?$/, 'view', 'properties.edit'],
     [/^\/profiles(\/[^/]+(\/activate)?)?$/, 'view', 'settings.edit'],
     [/^\/eula$/, null, 'settings.edit'],
   ];

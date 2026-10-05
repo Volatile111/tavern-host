@@ -235,6 +235,25 @@
         </div>
 
         <div class="tab" id="tab-settings" hidden>
+          <section class="card" id="networkCard" hidden>
+            <div class="installed-head">
+              <h3>Servers behind this proxy <span class="count" id="networkCount"></span></h3>
+            </div>
+            <p class="muted small-text">BungeeCord's server list (config.yml). Players join this proxy and land on the first server; the others are reached with /server. Restart the proxy after a change.</p>
+            <div id="networkList"></div>
+            <div data-perm="properties.edit">
+              <h4 class="section-label">Add a server</h4>
+              <div class="form-grid">
+                <div><label for="networkPick">Tavern Host server</label><select id="networkPick"></select></div>
+                <div><label for="networkName">Name in BungeeCord</label><input id="networkName" maxlength="32" spellcheck="false"></div>
+                <div><label for="networkAddress">Address</label><input id="networkAddress" placeholder="host:port" spellcheck="false"></div>
+              </div>
+              <label class="toggle small-text"><input type="checkbox" id="networkFirst"> Players land here first</label>
+              <label class="toggle small-text" id="networkPrepareRow"><input type="checkbox" id="networkPrepare"> Set it up for BungeeCord (Paper/Spigot: <code>bungeecord: true</code> in spigot.yml and <code>online-mode=false</code>)</label>
+              <p class="warn-banner small-text" id="networkPrepareWarn" hidden>With online-mode off, that server trusts whoever connects. Only let players reach it through the proxy: don't forward its port, and keep it off the internet.</p>
+              <div class="btn-row"><button class="primary" type="button" id="networkAdd">Add to the proxy</button></div>
+            </div>
+          </section>
           <form id="settingsForm" class="settings">
             <section class="card">
               <h3>Panel</h3>

@@ -1,7 +1,7 @@
 {
   "name": "tavern-host",
   "productName": "Tavern Host",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "description": "Tavern Host: a control panel for game servers (Valheim first, more games coming).",
   "author": "Tavern Host",
   "private": true,

@@ -13,7 +13,8 @@ import { defenderScan } from '../modscan.ts';
 export type Loader = 'fabric' | 'quilt' | 'forge' | 'neoforge' | 'plugin' | 'paper-plugin' | 'bungee' | 'unknown';
 export type ContentKind = 'mods' | 'plugins';
 
-const KIND_BY_FLAVOR: Record<string, ContentKind> = { fabric: 'mods', forge: 'mods', neoforge: 'mods', paper: 'plugins', spigot: 'plugins' };
+// BungeeCord (the proxy) has plugins too, in its own plugins folder; they're BungeeCord plugins, not Bukkit ones.
+const KIND_BY_FLAVOR: Record<string, ContentKind> = { fabric: 'mods', forge: 'mods', neoforge: 'mods', paper: 'plugins', spigot: 'plugins', bungeecord: 'plugins' };
 const LOADER_NAMES: Record<Loader, string> = {
   fabric: 'Fabric mod',
   quilt: 'Quilt mod',
@@ -164,6 +165,8 @@ export interface JarInfo {
   /** Client-only mods do nothing on a server (and can crash it). */
   clientOnly: boolean;
   iconEntry: string | null;
+  /** Has a bungee.yml (a BungeeCord plugin, possibly alongside a Bukkit plugin.yml in one jar). */
+  bungee: boolean;
 }
 
 const infoCache = new Map<string, JarInfo>();
@@ -174,7 +177,7 @@ export function readJar(file: string): JarInfo {
   const cached = infoCache.get(cacheKey);
   if (cached) return cached;
   const base = path.basename(file).replace(/\.disabled$/i, '').replace(/\.jar$/i, '');
-  const info: JarInfo = { loader: 'unknown', id: base.toLowerCase(), name: base, version: '', description: '', authors: '', mcRange: null, mcCheck: null, clientOnly: false, iconEntry: null };
+  const info: JarInfo = { loader: 'unknown', id: base.toLowerCase(), name: base, version: '', description: '', authors: '', mcRange: null, mcCheck: null, clientOnly: false, iconEntry: null, bungee: false };
   const zip = new ZipFile(file);
   try {
     const manifestVersion = /Implementation-Version:\s*(\S+)/.exec(zip.text('META-INF/MANIFEST.MF') ?? '')?.[1] ?? '';
@@ -185,6 +188,7 @@ export function readJar(file: string): JarInfo {
     const paperYml = zip.text('paper-plugin.yml');
     const pluginYml = zip.text('plugin.yml');
     const bungeeYml = zip.text('bungee.yml');
+    info.bungee = !!bungeeYml;
     if (fabric) {
       const j = JSON.parse(fabric.replace(/[\u0000-\u001f]+/g, ' '));
       const mcDep = j.depends?.minecraft;
@@ -261,6 +265,16 @@ export interface Warning {
 
 function checkCompat(info: JarInfo, flavor: string, mc: string): Warning[] {
   const w: Warning[] = [];
+  // BungeeCord: it loads bungee.yml (or a plugin.yml when there's no bungee.yml); one proxy serves many Minecraft
+  // versions, so no version checks.
+  if (flavor === 'bungeecord') {
+    if (info.loader === 'bungee' || info.bungee) return w;
+    if (info.loader === 'unknown') w.push({ level: 'error', text: "This jar isn't a plugin Tavern Host recognises (no bungee.yml or plugin.yml inside)." });
+    else if (['fabric', 'quilt', 'forge', 'neoforge'].includes(info.loader)) w.push({ level: 'error', text: `This is a ${LOADER_NAMES[info.loader]}; BungeeCord runs BungeeCord plugins, not mods. It won't load.` });
+    else if (info.loader === 'paper-plugin') w.push({ level: 'error', text: "This is a Paper plugin; it goes on a Paper server behind the proxy, not on BungeeCord." });
+    else w.push({ level: 'warn', text: 'This jar has a plugin.yml but no bungee.yml. Most of these are Bukkit/Paper plugins for the servers behind the proxy, not for BungeeCord; check it says it supports BungeeCord or Waterfall.' });
+    return w;
+  }
   const serverName = { fabric: 'Fabric', forge: 'Forge', neoforge: 'NeoForge', paper: 'Paper', spigot: 'Spigot' }[flavor] ?? flavor;
   const kind = KIND_BY_FLAVOR[flavor];
   const isMod = ['fabric', 'quilt', 'forge', 'neoforge'].includes(info.loader);
@@ -491,6 +505,13 @@ export function contentLinks(record: ServerRecord) {
     return [
       { label: 'Modrinth', url: `https://modrinth.com/mods?g=categories:${flavor}${v}`, help: `Mods filtered for ${flavor}${mc ? ` ${mc}` : ''}. Pick the file marked for your loader and version.` },
       { label: 'CurseForge', url: `https://www.curseforge.com/minecraft/search?class=mc-mods${mc ? `&gameVersion=${encodeURIComponent(mc)}` : ''}`, help: 'The biggest mod site. Check the file list for your loader and version.' },
+    ];
+  }
+  if (flavor === 'bungeecord') {
+    return [
+      { label: 'SpigotMC (BungeeCord)', url: 'https://www.spigotmc.org/resources/categories/bungee-proxy.2/', help: 'Plugins for BungeeCord proxies (some downloads need a SpigotMC account).' },
+      { label: 'Modrinth', url: 'https://modrinth.com/plugins?g=categories:bungeecord', help: 'BungeeCord plugins on Modrinth.' },
+      { label: 'Hangar', url: 'https://hangar.papermc.io/?platform=WATERFALL', help: 'Waterfall (BungeeCord-compatible) plugins on PaperMC’s site; most also run on BungeeCord.' },
     ];
   }
   return [

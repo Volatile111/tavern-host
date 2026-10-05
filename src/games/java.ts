@@ -290,7 +290,9 @@ export const java: GameModule = {
   addons: {
     available: (record) => contentKind(record) !== null,
     labels: (record) =>
-      contentKind(record) === 'plugins'
+      isProxy(record)
+        ? { tab: 'Plugins', noun: 'plugin', plural: 'plugins', dropHelp: 'Drop BungeeCord plugin <b>.jar</b> files here, or choose files. They go in the proxy’s plugins folder. (Plugins for the servers behind the proxy go on those servers.)' }
+        : contentKind(record) === 'plugins'
         ? { tab: 'Plugins', noun: 'plugin', plural: 'plugins', dropHelp: 'Drop plugin <b>.jar</b> files here, or choose files. They go in the plugins folder.' }
         : { tab: 'Mods', noun: 'mod', plural: 'mods', dropHelp: 'Drop mod <b>.jar</b> files here, or choose files. They go in the mods folder.' },
     accept: '.jar,.zip',

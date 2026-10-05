@@ -1622,7 +1622,112 @@ $('consoleFilter').addEventListener('input', renderConsole);
 
 // ---------- settings ----------
 
+// ---------- BungeeCord: the servers behind the proxy ----------
+
+let networkState = null;
+async function loadNetwork() {
+  const d = state.detail;
+  const isProxy = d.game === 'java' && d.settings?.flavor === 'bungeecord';
+  $('networkCard').hidden = !isProxy;
+  if (!isProxy) return;
+  try {
+    networkState = await api('GET', `/api/servers/${d.id}/network`);
+  } catch (err) {
+    $('networkList').replaceChildren(el('p', 'error', err.message));
+    return;
+  }
+  renderNetwork();
+}
+
+function renderNetwork() {
+  const n = networkState;
+  const list = $('networkList');
+  list.innerHTML = '';
+  if (n.error) list.appendChild(el('p', 'warn-banner', n.error));
+  $('networkCount').textContent = n.servers.length ? String(n.servers.length) : '';
+  const first = n.priorities[0];
+  for (const s of n.servers) {
+    const row = el('div', 'node-row');
+    const info = el('div', 'node-info');
+    // Which Tavern Host server this is: same address (and the same name, when two servers share an address).
+    const match = n.candidates.find((c) => c.address === s.address && c.suggested === s.name) ?? n.candidates.find((c) => c.address === s.address);
+    const title = el('b', null, s.name);
+    info.appendChild(title);
+    if (s.name === first) info.appendChild(el('span', 'type-badge loc-server', 'Players land here'));
+    info.appendChild(el('div', 'muted small-text', [s.address, match ? `Tavern Host: ${match.name}${match.node ? ` (on ${match.node})` : ''}` : null, s.restricted ? 'restricted' : null].filter(Boolean).join(' · ')));
+    row.appendChild(info);
+    if (hasPerm('properties.edit')) {
+      const actions = el('div', 'actions');
+      if (s.name !== first) {
+        const def = el('button', 'small ghost', 'Land here first');
+        def.addEventListener('click', async () => {
+          try {
+            networkState = { ...networkState, ...(await api('PUT', `/api/servers/${state.detail.id}/network/default`, { name: s.name })) };
+            renderNetwork();
+            toast(`Players now land on ${s.name}. Restart the proxy to apply.`);
+          } catch (err) {
+            toast(err.message, true);
+          }
+        });
+        actions.appendChild(def);
+      }
+      const rm = el('button', 'small red ghost', 'Remove');
+      rm.addEventListener('click', async () => {
+        if (!confirm(`Remove ${s.name} from the proxy's server list? (The server itself is not touched.)`)) return;
+        try {
+          networkState = { ...networkState, ...(await api('DELETE', `/api/servers/${state.detail.id}/network/${encodeURIComponent(s.name)}`)) };
+          renderNetwork();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      });
+      actions.appendChild(rm);
+      row.appendChild(actions);
+    }
+    list.appendChild(row);
+  }
+  if (!n.servers.length && !n.error) list.appendChild(el('p', 'muted', 'No servers yet.'));
+  // The picker: Tavern Host's Java servers (address filled in), or "Another server" for anything else.
+  const pick = $('networkPick');
+  pick.innerHTML = '';
+  pick.add(new Option('Another server (type its address)', ''));
+  for (const c of n.candidates) pick.add(new Option(`${c.name}${c.node ? ` (on ${c.node})` : ''} · ${c.address}`, c.id));
+  syncNetworkPick();
+}
+
+function syncNetworkPick() {
+  const c = networkState?.candidates.find((x) => x.id === $('networkPick').value);
+  $('networkAddress').disabled = !!c;
+  $('networkAddress').value = c ? c.address : '';
+  if (c) $('networkName').value = c.suggested;
+  $('networkPrepareRow').hidden = !c?.canPrepare;
+  if (!c?.canPrepare) $('networkPrepare').checked = false;
+  $('networkPrepareWarn').hidden = !$('networkPrepare').checked;
+}
+$('networkPick').addEventListener('change', syncNetworkPick);
+$('networkPrepare').addEventListener('change', () => ($('networkPrepareWarn').hidden = !$('networkPrepare').checked));
+$('networkAdd').addEventListener('click', async () => {
+  const serverId = $('networkPick').value || undefined;
+  try {
+    const r = await api('POST', `/api/servers/${state.detail.id}/network`, {
+      serverId,
+      name: $('networkName').value.trim(),
+      address: serverId ? undefined : $('networkAddress').value.trim(),
+      first: $('networkFirst').checked,
+      prepare: $('networkPrepare').checked,
+    });
+    networkState = { ...networkState, ...r };
+    renderNetwork();
+    $('networkName').value = '';
+    $('networkFirst').checked = false;
+    toast(r.notes?.length ? r.notes.join(' ') : 'Added.');
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+
 function renderSettings() {
+  loadNetwork();
   const d = state.detail;
   const game = state.games.find((g) => g.id === d.game);
   $('sName').value = d.name;
