@@ -2047,7 +2047,7 @@ function valheimListState(inst: ReturnType<typeof getInstance>) {
 function playerActions(inst: ReturnType<typeof getInstance>): string[] {
   const out = ['note'];
   if (inst.record.game === 'valheim') return [...out, ...Object.keys(VALHEIM_LIST_ACTIONS)];
-  if (inst.record.game === 'terraria') return [...out, 'kick', 'ban'];
+  if (inst.record.game.startsWith('terraria')) return [...out, 'kick', 'ban'];
   if (!inst.module.commands) return out;
   out.push('kick', 'op', 'deop');
   if (inst.record.game === 'java') out.push('whitelist-add', 'whitelist-remove', 'ban', 'pardon');
@@ -2093,8 +2093,8 @@ route('POST', '/api/servers/:id/players/:name/action', async (ctx) => {
   }
   if (!inst.isRunning) throw new HttpError(409, 'The server is not running.');
   // Terraria's console takes the plain name ("kick Some Player"); Minecraft wants it quoted.
-  const q = inst.record.game === 'terraria' ? name : `"${name}"`;
-  const why = inst.record.game === 'terraria' ? '' : String(reason ?? '').replace(/[\r\n"]/g, ' ').trim().slice(0, 120);
+  const q = inst.record.game.startsWith('terraria') ? name : `"${name}"`;
+  const why = inst.record.game.startsWith('terraria') ? '' : String(reason ?? '').replace(/[\r\n"]/g, ' ').trim().slice(0, 120);
   const cmd = {
     kick: `kick ${q}${why ? ` ${why}` : ''}`,
     op: `op ${q}`,

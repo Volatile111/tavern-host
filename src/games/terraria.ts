@@ -16,12 +16,12 @@ const VERSION_FILE = '.tavernhost-version';
 const CONFIG_FILE = 'tavernhost-serverconfig.txt';
 const DOTNET = (dir: string) => path.join(dir, 'dotnet', 'dotnet.exe');
 
-const SIZES = [
+export const SIZES = [
   { value: '1', label: 'Small (4200 × 1200)' },
   { value: '2', label: 'Medium (6400 × 1800)' },
   { value: '3', label: 'Large (8400 × 2400)' },
 ];
-const DIFFICULTIES = [
+export const DIFFICULTIES = [
   { value: '0', label: 'Classic' },
   { value: '1', label: 'Expert' },
   { value: '2', label: 'Master' },
@@ -34,12 +34,12 @@ function num(v: unknown, name: string, min: number, max: number): number {
   return n;
 }
 
-const savesDir = (record: ServerRecord) => String(record.settings.saveDir || path.join(record.installDir, 'saves'));
+export const savesDir = (record: ServerRecord) => String(record.settings.saveDir || path.join(record.installDir, 'saves'));
 const worldFile = (record: ServerRecord) => path.join(savesDir(record), 'Worlds', `${String(record.settings.world)}.wld`);
 const modsDir = (record: ServerRecord) => path.join(savesDir(record), 'Mods');
 
-/** The serverconfig.txt Tavern Host writes before every start (its settings are the truth). */
-function writeConfig(record: ServerRecord) {
+/** The serverconfig.txt Tavern Host writes before every start (its settings are the truth). Shared with vanilla Terraria. */
+export function writeConfig(record: ServerRecord) {
   const s = record.settings;
   const lines = [
     '# Written by Tavern Host before every start. Change these in Tavern Host (Settings), not here.',
@@ -130,7 +130,7 @@ async function sha256(file: string): Promise<string> {
   return hash.digest('hex');
 }
 
-function createTerrariaParser(): LogParser {
+export function createTerrariaParser(): LogParser {
   const st: LogState = { ready: false, players: [], playerCount: 0, version: null, lastSave: null, extra: {} };
   const known: Record<string, string> = {};
   let tml: string | null = null;

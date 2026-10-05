@@ -13,6 +13,7 @@ import { jobsFor } from './jobs.ts';
 import { latestDownload, installedVersion } from './games/bedrock.ts';
 import { latestBuild, installedBuild } from './steamcmd.ts';
 import { latestTmlVersion, installedTmlVersion } from './games/terraria.ts';
+import { latestVanillaVersion, installedVanillaVersion } from './games/terraria-vanilla.ts';
 import { SATISFACTORY_APP } from './games/satisfactory.ts';
 import { SPACE_ENGINEERS_APP } from './games/spaceengineers.ts';
 import { readProperties } from './properties.ts';
@@ -146,6 +147,13 @@ const SOURCES: Record<string, Source> = {
         writeFileSync(buildNote(inst), JSON.stringify({ appId: SPACE_ENGINEERS_APP, build, at: Date.now() }, null, 2));
       } catch {}
     },
+  },
+  // The official Terraria dedicated server (terraria.org).
+  'terraria-vanilla': {
+    name: 'Terraria',
+    latest: async () => ({ version: await latestVanillaVersion(), updated: null }),
+    current: (inst) => installedVanillaVersion(inst.record.installDir),
+    newer: newerDotted,
   },
   // tModLoader releases on GitHub (Terraria itself comes inside them).
   terraria: {

@@ -15,6 +15,7 @@ import { valheim } from './games/valheim.ts';
 import { bedrock } from './games/bedrock.ts';
 import { java } from './games/java.ts';
 import { terraria } from './games/terraria.ts';
+import { terrariaVanilla } from './games/terraria-vanilla.ts';
 import { satisfactory } from './games/satisfactory.ts';
 import { spaceEngineers } from './games/spaceengineers.ts';
 import { setStatsSource, forgetStats } from './stats.ts';
@@ -23,7 +24,8 @@ import { syncPlayers, forgetPlayers, mutedPlayers } from './players.ts';
 import { createBackup, restoreBackup, pruneScheduled, listBackups, backupsFolder, resumeCutOffBackup, type BackupKind, type BackupTarget } from './backups.ts';
 import { assertModifiable, recycle } from './files.ts';
 
-export const GAMES: Record<string, GameModule> = { bedrock, java, valheim, terraria, satisfactory, spaceengineers: spaceEngineers };
+// "terraria" is Terraria with tModLoader (its id from before vanilla existed); "terraria-vanilla" is the official server.
+export const GAMES: Record<string, GameModule> = { bedrock, java, valheim, 'terraria-vanilla': terrariaVanilla, terraria, satisfactory, spaceengineers: spaceEngineers };
 
 // runner.ts in development, runner.js in the installed (compiled) app: same folder and extension as this file.
 const thisFile = fileURLToPath(import.meta.url);

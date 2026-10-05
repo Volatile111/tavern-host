@@ -1986,6 +1986,11 @@ const UPDATE_GAMES = {
     autoHelp: "Automatic updates: when Steam has a new Space Engineers server build, players get a 5-minute countdown in chat, the world is backed up, Steam installs the update and the server starts again. Players' games must be on the same version (Steam updates them). Checked every 30 minutes.",
     forceHelp: 'Force update: asks Steam right now and re-runs the update with a full file check, even if this server already looks up to date.',
   },
+  'terraria-vanilla': {
+    source: 'terraria.org',
+    autoHelp: "Automatic updates: when terraria.org has a new dedicated server, players get a 5-minute countdown in chat, the world is backed up, the new version is installed and the server starts again. Players' games must be on the same version (Steam updates them). Checked every 30 minutes.",
+    forceHelp: 'Force update: reinstalls the latest Terraria server right now, even if this one already looks up to date.',
+  },
   terraria: {
     source: 'GitHub (tModLoader releases)',
     autoHelp: "Automatic updates: when tModLoader releases a new version, players get a 5-minute countdown in chat, the world is backed up, the new version is installed and the server starts again. Players' tModLoader must be on the same version (Steam updates it). Checked every 30 minutes.",
@@ -3299,7 +3304,8 @@ const GAME_BLURBS = {
   valheim: 'Viking survival co-op. Vanilla or modded (BepInEx).',
   bedrock: 'Minecraft for Windows, consoles and phones. Addons and crossplay.',
   java: 'Minecraft Java Edition: Vanilla, Paper, Fabric, Forge, NeoForge and more.',
-  terraria: 'Terraria with tModLoader: vanilla-style or modded. Players’ games download the server’s mods by themselves.',
+  'terraria-vanilla': 'The official Terraria server, no mods. Players join with the normal game.',
+  terraria: 'Terraria with tModLoader mods. Players need tModLoader (free on Steam); it downloads the server’s mods by itself.',
   satisfactory: 'Factory building co-op. Works with the in-game Server Manager; mods through Satisfactory Mod Manager.',
   spaceengineers: 'Build ships and stations in space. Steam Workshop mods download to players by themselves.',
 };
