@@ -12,6 +12,7 @@ import { listInstances, getInstance } from './instances.ts';
 import { jobsFor } from './jobs.ts';
 import { latestDownload, installedVersion } from './games/bedrock.ts';
 import { latestBuild, installedBuild } from './steamcmd.ts';
+import { latestTmlVersion, installedTmlVersion } from './games/terraria.ts';
 import { readProperties } from './properties.ts';
 
 type Instance = ReturnType<typeof getInstance>;
@@ -98,6 +99,13 @@ const SOURCES: Record<string, Source> = {
       } catch {}
     },
   },
+  // tModLoader releases on GitHub (Terraria itself comes inside them).
+  terraria: {
+    name: 'tModLoader',
+    latest: async () => ({ version: await latestTmlVersion(), updated: null }),
+    current: (inst) => installedTmlVersion(inst.record.installDir),
+    newer: newerDotted,
+  },
 };
 
 export const updatesSupported = (game: string) => game in SOURCES;
@@ -178,7 +186,7 @@ export async function updateGame(serverId: string, opts: { countdownMinutes?: nu
     inst.log(`${opts.auto ? 'Automatic update' : opts.force ? 'Forced update' : 'Update'} to ${targetLabel} started.`);
     if (wasRunning) {
       const minutes = Math.max(0, Math.min(Number(opts.countdownMinutes ?? 0), 60));
-      if (inst.module.commands) {
+      if (inst.takesCommands) {
         const marks = minutes ? [minutes, ...[30, 15, 10, 5, 2, 1].filter((m) => m < minutes)] : [];
         const went = await inst.countdownThen('stop', marks, `Server updating to ${targetLabel} in {time}. Back in a few minutes!`, `update to ${targetLabel}`);
         if (!went) {

@@ -1871,6 +1871,11 @@ const UPDATE_GAMES = {
     autoHelp: "Automatic updates: when Steam has a new Valheim server build, Tavern Host waits until nobody is online (at most an hour; Valheim can't message players), backs up the world, lets Steam install the update and starts the server again. Mods (BepInEx) are kept, but a big game update can break some until their authors update them. Checked every 30 minutes. Players' games must be on the same version (Steam updates them).",
     forceHelp: 'Force update: asks Steam right now and re-runs the update with a full file check, even if this server already looks up to date. Same steps: backup, update, start.',
   },
+  terraria: {
+    source: 'GitHub (tModLoader releases)',
+    autoHelp: "Automatic updates: when tModLoader releases a new version, players get a 5-minute countdown in chat, the world is backed up, the new version is installed and the server starts again. Players' tModLoader must be on the same version (Steam updates it). Checked every 30 minutes.",
+    forceHelp: 'Force update: reinstalls the latest tModLoader right now, even if this server already looks up to date. Same steps: countdown, backup, install, start.',
+  },
 };
 
 async function loadBedrockUpdate(check) {
@@ -3140,6 +3145,7 @@ const GAME_BLURBS = {
   valheim: 'Viking survival co-op. Vanilla or modded (BepInEx).',
   bedrock: 'Minecraft for Windows, consoles and phones. Addons and crossplay.',
   java: 'Minecraft Java Edition: Vanilla, Paper, Fabric, Forge, NeoForge and more.',
+  terraria: 'Terraria with tModLoader: vanilla-style or modded. Players’ games download the server’s mods by themselves.',
 };
 function renderGamePicks() {
   const box = $('newGamePicks');

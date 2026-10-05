@@ -69,6 +69,11 @@ const ICONS = {
     '#3a4250',
     '<rect x="10" y="7" width="12" height="3" rx="1" fill="#b3bccb"/><path d="M9 11h14v12a3 3 0 0 1-3 3h-8a3 3 0 0 1-3-3z" fill="#dfe5ee"/><rect x="12" y="15" width="8" height="5" rx="1" fill="#8d99ab"/>',
   ),
+  // A tree on a grassy hill under a night sky
+  terraria: tile(
+    '#1d2a5b',
+    '<circle cx="24" cy="8" r="2.5" fill="#f4f1c9"/><circle cx="9" cy="6" r="0.8" fill="#f4f1c9"/><circle cx="15" cy="9" r="0.6" fill="#f4f1c9"/><path d="M0 24c6-4 12-5 18-3s10 1 14-1v12H0z" fill="#3d8b2f"/><path d="M0 27c6-2 13-2 20 0s9 1 12 0v5H0z" fill="#7a4e2d"/><rect x="11" y="13" width="3" height="9" fill="#6d4427"/><circle cx="12.5" cy="11" r="5" fill="#2f7a2a"/><circle cx="10" cy="13" r="3" fill="#3f9a35"/>',
+  ),
   // Horned helmet
   valheim: tile(
     '#4a1f1a',

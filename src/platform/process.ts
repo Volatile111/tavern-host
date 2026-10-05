@@ -112,6 +112,16 @@ export async function sendCtrlC(pid: number): Promise<boolean> {
   }
 }
 
+/** Types a line into a process's own console window (servers that ignore piped input, e.g. Terraria). */
+export async function sendConsoleInput(pid: number, text: string): Promise<boolean> {
+  try {
+    const { stdout } = await powershell('send-console-input.ps1', ['-ProcessId', String(pid), '-Text', text]);
+    return stdout.includes('sent');
+  } catch {
+    return false;
+  }
+}
+
 /** Sends one console command to a server through its runner's named pipe (see runner.ts). */
 export function sendPipeCommand(pipe: string, token: string, command: string): Promise<void> {
   return new Promise((resolve, reject) => {

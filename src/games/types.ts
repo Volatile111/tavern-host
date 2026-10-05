@@ -195,6 +195,15 @@ export interface GameModule {
    * sent from the Console tab, and Stop sends `stop` so the world saves.
    */
   commands?: { stop: string | ((record: ServerRecord) => string) };
+  /**
+   * Games that only read commands typed into a real console window (Terraria / tModLoader ignore piped input). The
+   * server runs in its own hidden console and Tavern Host types commands into it; Stop types `stop`.
+   */
+  consoleCommands?: { stop: string };
+  /** The game's own log file, read for the Console tab instead of Tavern Host's (games whose output can't be captured). */
+  gameLog?(record: ServerRecord): string;
+  /** Lines to leave out of the Console tab (e.g. hundreds of world-generation progress lines). Still read by the parser. */
+  hideLine?(line: string): boolean;
   /** Runs before every start (e.g. download the Java runtime if it's missing). `note` writes to the console. */
   prepare?(record: ServerRecord, note: (message: string) => void): Promise<void>;
   /** Versions for a 'select' field with optionsFrom (e.g. Minecraft versions for a server type). */

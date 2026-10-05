@@ -8,19 +8,20 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import os from 'node:os';
 import { readJson, writeJson, dataPath, dataDir, isDev, rootDir } from './store.ts';
-import { startHidden, isAlive, processName, sendCtrlC, forceKill, waitForExit, sendPipeCommand, processesRunningFrom } from './platform/process.ts';
+import { startHidden, isAlive, processName, sendCtrlC, sendConsoleInput, forceKill, waitForExit, sendPipeCommand, processesRunningFrom } from './platform/process.ts';
 import { quickCheckDb } from './leveldb.ts';
 import type { GameModule, LogParser, ServerRecord, Settings } from './games/types.ts';
 import { valheim } from './games/valheim.ts';
 import { bedrock } from './games/bedrock.ts';
 import { java } from './games/java.ts';
+import { terraria } from './games/terraria.ts';
 import { setStatsSource, forgetStats } from './stats.ts';
 import { parseChatLine, recordChat } from './chat.ts';
 import { syncPlayers, forgetPlayers, mutedPlayers } from './players.ts';
 import { createBackup, restoreBackup, pruneScheduled, listBackups, backupsFolder, resumeCutOffBackup, type BackupKind, type BackupTarget } from './backups.ts';
 import { assertModifiable, recycle } from './files.ts';
 
-export const GAMES: Record<string, GameModule> = { bedrock, java, valheim };
+export const GAMES: Record<string, GameModule> = { bedrock, java, valheim, terraria };
 
 // runner.ts in development, runner.js in the installed (compiled) app: same folder and extension as this file.
 const thisFile = fileURLToPath(import.meta.url);
@@ -121,7 +122,13 @@ class ServerInstance {
   }
 
   get logFile() {
-    return dataPath('servers', this.record.id, 'server.log');
+    // Games whose console output can't be captured (Terraria) write their own log; read that one.
+    return this.module.gameLog ? this.module.gameLog(this.record) : dataPath('servers', this.record.id, 'server.log');
+  }
+
+  /** The server reads typed commands: through the runner's pipe, or typed into its own console. */
+  get takesCommands() {
+    return !!(this.module.commands || this.module.consoleCommands);
   }
 
   private setStatus(status: Status, error: string | null = this.lastError) {
@@ -227,7 +234,7 @@ class ServerInstance {
           continue;
         }
         this.parser.feed(line);
-        if (line.trim()) this.pushLine(line);
+        if (line.trim() && !this.module.hideLine?.(line)) this.pushLine(line);
       }
       if (!wasReady && this.parser.state().ready && this.status === 'starting') {
         this.note('Server is ready for players.');
@@ -386,8 +393,8 @@ class ServerInstance {
     try {
       this.module.checkInstall(this.record.installDir);
       mkdirSync(dataPath('servers', this.id), { recursive: true });
-      // Keep the previous run's log for troubleshooting.
-      if (existsSync(this.logFile)) renameSync(this.logFile, this.logFile.replace(/\.log$/, '.previous.log'));
+      // Keep the previous run's log for troubleshooting (a game's own log is the game's to manage: see its prepare()).
+      if (!this.module.gameLog && existsSync(this.logFile)) renameSync(this.logFile, this.logFile.replace(/\.log$/, '.previous.log'));
       this.resetLog();
       this.console = [];
       this.setStatus('starting', null);
@@ -449,6 +456,12 @@ class ServerInstance {
           },
         );
       }
+      if (!sent && this.module.consoleCommands) {
+        const stopCmd = this.module.consoleCommands.stop;
+        this.note(`Stopping: typing "${stopCmd}" so the server saves and shuts down...`);
+        sent = await sendConsoleInput(pid, stopCmd);
+        if (!sent) this.note('Could not type the stop command; trying Ctrl+C.');
+      }
       if (!sent) {
         this.note('Stopping: asking the server to save and shut down (Ctrl+C)...');
         sent = await sendCtrlC(pid);
@@ -496,7 +509,7 @@ class ServerInstance {
 
   /** A message to everyone in the game (gold "[Server]" text where the game supports it). */
   async announce(text: string) {
-    if (!this.module.commands || !this.isRunning) return;
+    if (!this.takesCommands || !this.isRunning) return;
     const cmd =
       this.record.game === 'bedrock'
         ? `tellraw @a ${JSON.stringify({ rawtext: [{ text: `§6[Server]§r ${text}` }] })}`
@@ -514,7 +527,7 @@ class ServerInstance {
     if (this.countdown) throw new Error('A countdown is already running. Cancel it first.');
     const total = Math.max(0, ...warnMinutes.filter((m) => Number.isFinite(m) && m > 0)) * 60;
     const verb = action === 'restart' ? 'restarting' : 'shutting down';
-    if (!total || !this.module.commands || !this.isRunning) {
+    if (!total || !this.takesCommands || !this.isRunning) {
       if (action === 'restart') await this.restart();
       else await this.stop();
       return true;
@@ -582,12 +595,18 @@ class ServerInstance {
 
   /** Sends a typed command to the server's console (games with `commands` only). */
   async sendCommand(command: string) {
-    if (!this.module.commands) throw new Error(`${this.module.name} servers don't accept console commands.`);
-    if (!this.pid || !isAlive(this.pid) || !this.pipe || !this.token) throw new Error('The server is not running.');
+    if (!this.takesCommands) throw new Error(`${this.module.name} servers don't accept console commands.`);
     const clean = String(command ?? '').replace(/[\r\n]+/g, ' ').trim().replace(/^\//, '');
     if (!clean) throw new Error('Type a command first.');
     if (clean.length > 1000) throw new Error('That command is too long.');
-    await sendPipeCommand(this.pipe, this.token, clean);
+    if (this.module.consoleCommands) {
+      // Typed into the server's own console (it ignores piped input).
+      if (!this.pid || !isAlive(this.pid)) throw new Error('The server is not running.');
+      if (!(await sendConsoleInput(this.pid, clean))) throw new Error("Couldn't type into the server's console.");
+    } else {
+      if (!this.pid || !isAlive(this.pid) || !this.pipe || !this.token) throw new Error('The server is not running.');
+      await sendPipeCommand(this.pipe, this.token, clean);
+    }
     this.pushLine(`> ${clean}`);
   }
 
@@ -651,7 +670,7 @@ class ServerInstance {
       live,
       job: jobsFor(this.id).at(-1) ?? null,
       canInstall: !!this.module.install,
-      canCommand: !!this.module.commands,
+      canCommand: this.takesCommands,
       countdown: this.countdown,
       hasProperties: !!this.module.properties,
       canBackup: !!this.module.backup,
