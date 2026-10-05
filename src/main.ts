@@ -1034,6 +1034,8 @@ route('GET', '/api/servers/:id/addons', async (ctx) => {
     moddingOff: addons.isOn ? !addons.isOn(inst.record) : false,
     sides: addons.sides ?? null,
     canCheckUpdates: !!addons.checkUpdates,
+    // Listed only: another tool manages them (Satisfactory Mod Manager).
+    readOnly: !!addons.readOnly,
     share: inst.record.game === 'valheim' ? { enabled: !!shareToken(inst.id) } : null,
     locations: addons.locations
       ? { options: addons.locations.options, current: addons.locations.get(inst.record), paths: addons.locations.describe(inst.record) }

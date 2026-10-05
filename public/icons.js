@@ -74,6 +74,11 @@ const ICONS = {
     '#1d2a5b',
     '<circle cx="24" cy="8" r="2.5" fill="#f4f1c9"/><circle cx="9" cy="6" r="0.8" fill="#f4f1c9"/><circle cx="15" cy="9" r="0.6" fill="#f4f1c9"/><path d="M0 24c6-4 12-5 18-3s10 1 14-1v12H0z" fill="#3d8b2f"/><path d="M0 27c6-2 13-2 20 0s9 1 12 0v5H0z" fill="#7a4e2d"/><rect x="11" y="13" width="3" height="9" fill="#6d4427"/><circle cx="12.5" cy="11" r="5" fill="#2f7a2a"/><circle cx="10" cy="13" r="3" fill="#3f9a35"/>',
   ),
+  // A factory with a conveyor belt
+  satisfactory: tile(
+    '#2b2f36',
+    '<path d="M5 24V14l5 3v-3l5 3v-3l5 3V8h4v16z" fill="#f2a33a"/><rect x="21" y="5" width="2" height="4" fill="#c9cdd3"/><rect x="5" y="24" width="22" height="3" rx="1.5" fill="#c9cdd3"/><circle cx="8" cy="25.5" r="1" fill="#2b2f36"/><circle cx="16" cy="25.5" r="1" fill="#2b2f36"/><circle cx="24" cy="25.5" r="1" fill="#2b2f36"/><rect x="8" y="19" width="3" height="3" fill="#2b2f36"/><rect x="14" y="19" width="3" height="3" fill="#2b2f36"/>',
+  ),
   // Horned helmet
   valheim: tile(
     '#4a1f1a',

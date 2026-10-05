@@ -120,6 +120,8 @@ export interface AddonSupport {
   links?: { label: string; url: string; help?: string }[] | ((record: ServerRecord) => { label: string; url: string; help?: string }[]);
   /** File types the upload box accepts. */
   accept: string;
+  /** Listed only: another tool manages them (Satisfactory: Satisfactory Mod Manager). No upload box or buttons. */
+  readOnly?: boolean;
   /** `install` also accepts a folder (Bedrock: unpacked behavior/resource packs can be dropped as folders). */
   folders?: boolean;
   /** Changes need the server stopped (Valheim: loaded mod DLLs are locked while it runs). */
@@ -204,6 +206,12 @@ export interface GameModule {
   gameLog?(record: ServerRecord): string;
   /** Lines to leave out of the Console tab (e.g. hundreds of world-generation progress lines). Still read by the parser. */
   hideLine?(line: string): boolean;
+  /** Games with their own server API (Satisfactory): console commands go through it; the answer is shown in the console. */
+  runCommand?(record: ServerRecord, command: string): Promise<string | void>;
+  /** A clean stop the game's own way (Satisfactory: save, then the API's Shutdown). true = asked; false = fall back to Ctrl+C. */
+  gracefulStop?(record: ServerRecord, note: (message: string) => void): Promise<boolean>;
+  /** Runs once each time the server becomes ready (Satisfactory: claim it, create the first game, apply settings). */
+  onReady?(record: ServerRecord, note: (message: string) => void): Promise<void>;
   /** Runs before every start (e.g. download the Java runtime if it's missing). `note` writes to the console. */
   prepare?(record: ServerRecord, note: (message: string) => void): Promise<void>;
   /** Versions for a 'select' field with optionsFrom (e.g. Minecraft versions for a server type). */

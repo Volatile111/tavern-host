@@ -13,6 +13,7 @@ import { jobsFor } from './jobs.ts';
 import { latestDownload, installedVersion } from './games/bedrock.ts';
 import { latestBuild, installedBuild } from './steamcmd.ts';
 import { latestTmlVersion, installedTmlVersion } from './games/terraria.ts';
+import { SATISFACTORY_APP } from './games/satisfactory.ts';
 import { readProperties } from './properties.ts';
 
 type Instance = ReturnType<typeof getInstance>;
@@ -96,6 +97,29 @@ const SOURCES: Record<string, Source> = {
     installed: (inst, build) => {
       try {
         writeFileSync(buildNote(inst), JSON.stringify({ appId: VALHEIM_APP, build, at: Date.now() }, null, 2));
+      } catch {}
+    },
+  },
+  // Satisfactory's dedicated server on Steam (public branch build), like Valheim.
+  satisfactory: {
+    name: 'Satisfactory',
+    latest: async () => {
+      const b = await latestBuild(SATISFACTORY_APP);
+      return { version: b.build, updated: b.updated };
+    },
+    current: (inst) => {
+      const fromSteam = installedBuild(SATISFACTORY_APP, inst.record.installDir);
+      if (fromSteam) return fromSteam;
+      try {
+        return String(JSON.parse(readFileSync(buildNote(inst), 'utf-8')).build ?? '') || null;
+      } catch {
+        return null;
+      }
+    },
+    newer: (a, b) => Number(a) > Number(b),
+    installed: (inst, build) => {
+      try {
+        writeFileSync(buildNote(inst), JSON.stringify({ appId: SATISFACTORY_APP, build, at: Date.now() }, null, 2));
       } catch {}
     },
   },
@@ -186,7 +210,7 @@ export async function updateGame(serverId: string, opts: { countdownMinutes?: nu
     inst.log(`${opts.auto ? 'Automatic update' : opts.force ? 'Forced update' : 'Update'} to ${targetLabel} started.`);
     if (wasRunning) {
       const minutes = Math.max(0, Math.min(Number(opts.countdownMinutes ?? 0), 60));
-      if (inst.takesCommands) {
+      if (inst.canAnnounce) {
         const marks = minutes ? [minutes, ...[30, 15, 10, 5, 2, 1].filter((m) => m < minutes)] : [];
         const went = await inst.countdownThen('stop', marks, `Server updating to ${targetLabel} in {time}. Back in a few minutes!`, `update to ${targetLabel}`);
         if (!went) {

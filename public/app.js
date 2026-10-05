@@ -1871,6 +1871,11 @@ const UPDATE_GAMES = {
     autoHelp: "Automatic updates: when Steam has a new Valheim server build, Tavern Host waits until nobody is online (at most an hour; Valheim can't message players), backs up the world, lets Steam install the update and starts the server again. Mods (BepInEx) are kept, but a big game update can break some until their authors update them. Checked every 30 minutes. Players' games must be on the same version (Steam updates them).",
     forceHelp: 'Force update: asks Steam right now and re-runs the update with a full file check, even if this server already looks up to date. Same steps: backup, update, start.',
   },
+  satisfactory: {
+    source: 'Steam',
+    autoHelp: "Automatic updates: when Steam has a new Satisfactory server build, Tavern Host waits until nobody is online (at most an hour; Satisfactory can't message players), saves and backs up, lets Steam install the update and starts the server again. Players' games must be on the same version (Steam updates them). Mods may need updating in Satisfactory Mod Manager after a big game update. Checked every 30 minutes.",
+    forceHelp: 'Force update: asks Steam right now and re-runs the update with a full file check, even if this server already looks up to date.',
+  },
   terraria: {
     source: 'GitHub (tModLoader releases)',
     autoHelp: "Automatic updates: when tModLoader releases a new version, players get a 5-minute countdown in chat, the world is backed up, the new version is installed and the server starts again. Players' tModLoader must be on the same version (Steam updates it). Checked every 30 minutes.",
@@ -3146,6 +3151,7 @@ const GAME_BLURBS = {
   bedrock: 'Minecraft for Windows, consoles and phones. Addons and crossplay.',
   java: 'Minecraft Java Edition: Vanilla, Paper, Fabric, Forge, NeoForge and more.',
   terraria: 'Terraria with tModLoader: vanilla-style or modded. Players’ games download the server’s mods by themselves.',
+  satisfactory: 'Factory building co-op. Works with the in-game Server Manager; mods through Satisfactory Mod Manager.',
 };
 function renderGamePicks() {
   const box = $('newGamePicks');
@@ -4992,7 +4998,9 @@ async function loadAddons() {
   }
   // Wording for this server type: addons (Bedrock), mods or plugins (Java).
   const L = addonState.labels;
-  $('addonAddTitle').textContent = `Add ${L.plural}`;
+  // Listed only (Satisfactory: mods are managed with Satisfactory Mod Manager): no upload box.
+  $('addonAddTitle').textContent = addonState.readOnly ? L.tab : `Add ${L.plural}`;
+  $('addonDrop').hidden = !!addonState.readOnly;
   $('addonAddHelp').innerHTML = L.dropHelp; // fixed text from Tavern Host itself
   // Bedrock also takes unpacked pack folders.
   $('addonDrop').querySelector('span').innerHTML = addonState.folders
@@ -5577,7 +5585,16 @@ function addonRow(p, compact = false) {
   if (p.duplicate) info.appendChild(el('div', 'sub warn-text', 'This pack is in both the server folder and the world folder. Remove one copy so it only loads once.'));
   row.appendChild(info);
   const actions = el('div', 'actions');
-  if (hasPerm('addons.manage')) {
+  // Managed by another tool (Satisfactory Mod Manager): just a link to the mod's page, whose Install button opens SMM.
+  if (addonState.readOnly && p.url) {
+    const page = el('a', 'small button-like', 'On ficsit.app');
+    page.href = p.url;
+    page.target = '_blank';
+    page.rel = 'noopener';
+    page.title = 'The mod’s page. Its Install button opens Satisfactory Mod Manager.';
+    actions.appendChild(page);
+  }
+  if (hasPerm('addons.manage') && !addonState.readOnly) {
     // Newer version found by "Check for updates".
     const newer = addonUpdates[p.id];
     if (newer) {

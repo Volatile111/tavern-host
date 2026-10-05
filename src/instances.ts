@@ -15,13 +15,14 @@ import { valheim } from './games/valheim.ts';
 import { bedrock } from './games/bedrock.ts';
 import { java } from './games/java.ts';
 import { terraria } from './games/terraria.ts';
+import { satisfactory } from './games/satisfactory.ts';
 import { setStatsSource, forgetStats } from './stats.ts';
 import { parseChatLine, recordChat } from './chat.ts';
 import { syncPlayers, forgetPlayers, mutedPlayers } from './players.ts';
 import { createBackup, restoreBackup, pruneScheduled, listBackups, backupsFolder, resumeCutOffBackup, type BackupKind, type BackupTarget } from './backups.ts';
 import { assertModifiable, recycle } from './files.ts';
 
-export const GAMES: Record<string, GameModule> = { bedrock, java, valheim, terraria };
+export const GAMES: Record<string, GameModule> = { bedrock, java, valheim, terraria, satisfactory };
 
 // runner.ts in development, runner.js in the installed (compiled) app: same folder and extension as this file.
 const thisFile = fileURLToPath(import.meta.url);
@@ -128,6 +129,11 @@ class ServerInstance {
 
   /** The server reads typed commands: through the runner's pipe, or typed into its own console. */
   get takesCommands() {
+    return !!(this.module.commands || this.module.consoleCommands || this.module.runCommand);
+  }
+
+  /** Games that can't be messaged in chat are left out of countdown warnings (announce needs a "say" command). */
+  get canAnnounce() {
     return !!(this.module.commands || this.module.consoleCommands);
   }
 
@@ -240,6 +246,7 @@ class ServerInstance {
         this.note('Server is ready for players.');
         this.setStatus('running', null);
         this.sendMutes().catch(() => {});
+        this.module.onReady?.(this.record, (m) => this.note(m)).catch((err) => this.note(`Setup after start failed: ${(err as Error).message}`));
       } else {
         events.emit('state', this.id);
       }
@@ -456,6 +463,10 @@ class ServerInstance {
           },
         );
       }
+      if (!sent && this.module.gracefulStop) {
+        this.note('Stopping: asking the server to save and shut down...');
+        sent = await this.module.gracefulStop(this.record, (m) => this.note(m));
+      }
       if (!sent && this.module.consoleCommands) {
         const stopCmd = this.module.consoleCommands.stop;
         this.note(`Stopping: typing "${stopCmd}" so the server saves and shuts down...`);
@@ -509,7 +520,7 @@ class ServerInstance {
 
   /** A message to everyone in the game (gold "[Server]" text where the game supports it). */
   async announce(text: string) {
-    if (!this.takesCommands || !this.isRunning) return;
+    if (!this.canAnnounce || !this.isRunning) return;
     const cmd =
       this.record.game === 'bedrock'
         ? `tellraw @a ${JSON.stringify({ rawtext: [{ text: `§6[Server]§r ${text}` }] })}`
@@ -527,7 +538,7 @@ class ServerInstance {
     if (this.countdown) throw new Error('A countdown is already running. Cancel it first.');
     const total = Math.max(0, ...warnMinutes.filter((m) => Number.isFinite(m) && m > 0)) * 60;
     const verb = action === 'restart' ? 'restarting' : 'shutting down';
-    if (!total || !this.takesCommands || !this.isRunning) {
+    if (!total || !this.canAnnounce || !this.isRunning) {
       if (action === 'restart') await this.restart();
       else await this.stop();
       return true;
@@ -599,7 +610,14 @@ class ServerInstance {
     const clean = String(command ?? '').replace(/[\r\n]+/g, ' ').trim().replace(/^\//, '');
     if (!clean) throw new Error('Type a command first.');
     if (clean.length > 1000) throw new Error('That command is too long.');
-    if (this.module.consoleCommands) {
+    if (this.module.runCommand) {
+      // Through the game's own server API; its answer goes in the console too.
+      if (!this.pid || !isAlive(this.pid)) throw new Error('The server is not running.');
+      this.pushLine(`> ${clean}`);
+      const answer = await this.module.runCommand(this.record, clean);
+      if (answer) for (const l of String(answer).split(/\r?\n/)) if (l.trim()) this.pushLine(l);
+      return;
+    } else if (this.module.consoleCommands) {
       // Typed into the server's own console (it ignores piped input).
       if (!this.pid || !isAlive(this.pid)) throw new Error('The server is not running.');
       if (!(await sendConsoleInput(this.pid, clean))) throw new Error("Couldn't type into the server's console.");
