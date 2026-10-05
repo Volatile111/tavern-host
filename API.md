@@ -247,6 +247,11 @@ curl -X POST -H "Authorization: Bearer th_…" -H "Content-Type: application/jso
 | `POST /api/settings/backup-copy/test` | Test a folder: {"folder"} → free space | Panel settings |
 | `POST /api/settings/backup-copy/sync` | Copy every existing backup that isn't there yet (in the background) | Panel settings |
 | `GET /api/nodes` | Nodes (other systems) managed from this panel | Panel settings |
+| `GET /api/node-targets` | Systems you can create servers on (nodes with Tavern Host, and whether they are online) | Create & import servers |
+| `GET /api/nodes/{node}/games` | A node's games and their settings fields (for creating a server there) | Create & import servers |
+| `GET /api/nodes/{node}/games/{game}/versions?from={type}` | Versions a node can install | Create & import servers |
+| `POST /api/nodes/{node}/servers/new` | Create a server on a node (same body as POST /api/servers/new); the answer has its id here (n~node~server) | Create & import servers |
+| `POST /api/nodes/{node}/servers` | Import a server folder on a node (same body as POST /api/servers) | Create & import servers |
 | `POST /api/nodes` | Add a node: {"code":"thnode://…","name"?} | Panel settings |
 | `PUT /api/nodes/{node}` | Rename a node: {"name"} | Panel settings |
 | `DELETE /api/nodes/{node}` | Remove a node (its servers keep running there) | Panel settings |

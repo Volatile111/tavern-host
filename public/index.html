@@ -963,6 +963,11 @@
   <form id="addForm" class="dialog-body">
     <h2>Import a server</h2>
     <p class="muted">For a server you already have the files for. To start from nothing, use <b>+ New</b> instead.</p>
+    <div id="addSystemWrap" hidden>
+      <label for="addSystem">System</label>
+      <select id="addSystem"></select>
+      <div class="field-help">The folder is on that system.</div>
+    </div>
     <label for="addGame">Game</label>
     <select id="addGame"></select>
     <label for="addName">Name in panel</label>
@@ -984,6 +989,11 @@
   <form id="newForm" class="dialog-body">
     <h2>New server</h2>
     <p class="muted">Tavern Host downloads the official server software for you. It can take a few minutes.</p>
+    <div id="newSystemWrap" hidden>
+      <label for="newSystem">System</label>
+      <select id="newSystem"></select>
+      <div class="field-help" id="newSystemHelp">Where the server runs: this system, or one of your nodes (it downloads and runs the server there).</div>
+    </div>
     <label>Game</label>
     <div class="game-picks" id="newGamePicks"></div>
     <select id="newGame" hidden></select>

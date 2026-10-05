@@ -763,6 +763,53 @@ async function vaultUiFor(scope: string, file: string): Promise<string> {
   return Buffer.concat(chunks).toString('utf-8');
 }
 
+// ---------- creating / importing servers on a node (from this panel's New and Import) ----------
+
+/** The systems this account can make servers on: this one, plus every node (online ones can be picked). */
+route('GET', '/api/node-targets', async (ctx) => {
+  needGlobal(ctx, 'servers.create');
+  // Systems with only Tavern Vault have no game servers.
+  return { nodes: listNodes().filter((n) => n.kind !== 'vault').map((n) => ({ id: n.id, name: n.name, online: n.online, version: n.version })) };
+});
+
+function nodeForCreate(ctx: Ctx, id: string) {
+  const p = needGlobal(ctx, 'servers.create');
+  const node = getNode(id);
+  const info = listNodes().find((n) => n.id === id);
+  if (info?.kind === 'vault') throw new HttpError(400, `${node.name} only has Tavern Vault; install Tavern Host there to run game servers.`);
+  if (!info?.online) throw new HttpError(409, `${node.name} is offline right now.`);
+  return { p, node };
+}
+
+// The node's own list of games and versions (it may run a newer or older Tavern Host than this panel).
+route('GET', '/api/nodes/:id/games', async (ctx) => {
+  const { node } = nodeForCreate(ctx, ctx.params[0]);
+  return nodeJson(node, 'GET', '/api/games');
+});
+route('GET', '/api/nodes/:id/games/:game/versions', async (ctx) => {
+  const { node } = nodeForCreate(ctx, ctx.params[0]);
+  const from = new URL(ctx.req.url ?? '', 'http://x').searchParams.get('from') ?? '';
+  return nodeJson(node, 'GET', `/api/games/${encodeURIComponent(ctx.params[1])}/versions?from=${encodeURIComponent(from)}`);
+});
+
+/** Passes a create/import to the node; the answer's server id becomes this panel's id for it (n~<node>~<server>). */
+async function createOnNode(ctx: Ctx, nodePath: '/api/servers/new' | '/api/servers', what: string) {
+  const { p, node } = nodeForCreate(ctx, ctx.params[0]);
+  const body = await readBody(ctx.req);
+  let snap: Record<string, unknown>;
+  try {
+    snap = await nodeJson<Record<string, unknown>>(node, 'POST', nodePath, body);
+  } catch (err) {
+    throw new HttpError((err as { status?: number }).status && (err as { status: number }).status < 500 ? (err as { status: number }).status : 502, `${node.name}: ${(err as Error).message}`);
+  }
+  audit(p, `${what} "${body.name}" on node ${node.name} (${body.installDir})`);
+  return { ...snap, id: remoteId(node.id, String(snap.id)), node: { id: node.id, name: node.name } };
+}
+// Body: the same as POST /api/servers/new (game, name, installDir, settings, acceptEula).
+route('POST', '/api/nodes/:id/servers/new', (ctx) => createOnNode(ctx, '/api/servers/new', 'created server'));
+// Body: the same as POST /api/servers (game, name, installDir).
+route('POST', '/api/nodes/:id/servers', (ctx) => createOnNode(ctx, '/api/servers', 'imported server'));
+
 // ---------- difficulty (every server type) ----------
 
 route('GET', '/api/servers/:id/difficulty', async (ctx) => {

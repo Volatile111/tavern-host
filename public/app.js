@@ -3148,8 +3148,47 @@ function slug(name) {
 
 let newFolderTouched = false;
 
+// New / Import on another system (a node): its own games list and versions, and the request goes through this panel.
+let newTarget = ''; // node id, or '' for this system
+let newGames = null; // the node's games (null = this system's state.games)
+const dialogGames = () => newGames ?? state.games;
+const gamesApi = () => (newTarget ? `/api/nodes/${encodeURIComponent(newTarget)}` : '/api');
+
+/** Fills a System picker (this system + nodes); hidden when there are no nodes. Resolves to whether it's shown. */
+async function fillSystemPicker(select, wrap) {
+  select.innerHTML = '';
+  select.add(new Option('This system', ''));
+  let nodes = [];
+  if (hasGlobal('servers.create')) nodes = (await api('GET', '/api/node-targets').catch(() => ({ nodes: [] }))).nodes;
+  for (const n of nodes) {
+    const opt = new Option(`${n.name}${n.online ? '' : ' (offline)'}`, n.id);
+    opt.disabled = !n.online;
+    select.add(opt);
+  }
+  wrap.hidden = !nodes.length;
+}
+
+/** Switches the New/Import dialog to a system: loads that node's games (or this system's). */
+async function useSystem(nodeId) {
+  newTarget = nodeId;
+  newGames = null;
+  if (nodeId) {
+    try {
+      newGames = await api('GET', `/api/nodes/${encodeURIComponent(nodeId)}/games`);
+    } catch (err) {
+      toast(err.message, true);
+      newTarget = '';
+    }
+  }
+  // Browsing a node's folders isn't available from here: type the path on that system.
+  for (const b of document.querySelectorAll('[data-browse="newFolder"], [data-browse="addInstall"]')) {
+    b.disabled = !!newTarget;
+    b.title = newTarget ? 'Type the folder path on that system' : '';
+  }
+}
+
 function renderNewFields() {
-  const game = state.games.find((g) => g.id === $('newGame').value);
+  const game = dialogGames().find((g) => g.id === $('newGame').value);
   const box = $('newFields');
   box.innerHTML = '';
   $('newEulaWrap').hidden = !game?.eula;
@@ -3232,7 +3271,7 @@ function selectField(game, f, id, initial) {
       select.add(new Option('Loading versions…', ''));
       select.disabled = true;
       try {
-        const { versions } = await api('GET', `/api/games/${game.id}/versions?from=${encodeURIComponent(source.value)}`);
+        const { versions } = await api('GET', `${gamesApi()}/games/${game.id}/versions?from=${encodeURIComponent(source.value)}`);
         select.innerHTML = '';
         for (const v of versions) select.add(new Option(v === 'latest' ? 'Latest' : v, v));
         help.textContent = versions.length ? `Newest first. ${versions.length} available.` : 'No versions available.';
@@ -3267,7 +3306,7 @@ const GAME_BLURBS = {
 function renderGamePicks() {
   const box = $('newGamePicks');
   box.innerHTML = '';
-  for (const g of state.games.filter((x) => x.canCreate)) {
+  for (const g of dialogGames().filter((x) => x.canCreate)) {
     const b = el('button', `game-pick${$('newGame').value === g.id ? ' active' : ''}`);
     b.type = 'button';
     b.appendChild(serverIcon({ game: g.id, settings: { flavor: 'vanilla' } }, 'srv-icon pick'));
@@ -3284,21 +3323,36 @@ function renderGamePicks() {
   }
 }
 
-$('btnNewServer').addEventListener('click', () => {
-  const creatable = state.games.filter((g) => g.canCreate);
+/** Fills the New dialog's game list for the chosen system and redraws it. */
+function resetNewGames() {
+  const creatable = dialogGames().filter((g) => g.canCreate);
+  const keep = $('newGame').value;
   $('newGame').innerHTML = '';
   for (const g of creatable) $('newGame').add(new Option(g.name, g.id));
-  $('newForm').reset();
-  $('newGame').value = creatable[0]?.id ?? '';
+  $('newGame').value = creatable.some((g) => g.id === keep) ? keep : (creatable[0]?.id ?? '');
   renderGamePicks();
+  renderNewFields();
+}
+const serverRoot = () => (newTarget ? 'C:\\GameServers' : (state.serverRoot ?? 'C:\\GameServers'));
+
+$('btnNewServer').addEventListener('click', async () => {
+  $('newForm').reset();
   newFolderTouched = false;
   $('newError').textContent = '';
-  renderNewFields();
+  await useSystem('');
+  resetNewGames();
   $('newDialog').showModal();
+  await fillSystemPicker($('newSystem'), $('newSystemWrap'));
+});
+$('newSystem').addEventListener('change', async () => {
+  await useSystem($('newSystem').value);
+  $('newSystem').value = newTarget;
+  resetNewGames();
+  if (!newFolderTouched) $('newFolder').value = $('newName').value.trim() ? `${serverRoot()}\\${slug($('newName').value)}` : '';
 });
 $('newGame').addEventListener('change', renderNewFields);
 $('newName').addEventListener('input', () => {
-  if (!newFolderTouched) $('newFolder').value = $('newName').value.trim() ? `${state.serverRoot ?? 'C:\\GameServers'}\\${slug($('newName').value)}` : '';
+  if (!newFolderTouched) $('newFolder').value = $('newName').value.trim() ? `${serverRoot()}\\${slug($('newName').value)}` : '';
   const serverName = $('nf_serverName') ?? $('nf_prop:server-name');
   if (serverName && !serverName.dataset.touched) serverName.value = $('newName').value;
 });
@@ -3307,7 +3361,7 @@ $('newFields').addEventListener('input', (e) => (e.target.dataset.touched = '1')
 $('newCancel').addEventListener('click', () => $('newDialog').close());
 $('newForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const game = state.games.find((g) => g.id === $('newGame').value);
+  const game = dialogGames().find((g) => g.id === $('newGame').value);
   if (!game) return;
   const settings = {};
   for (const f of game.newFields) {
@@ -3325,7 +3379,7 @@ $('newForm').addEventListener('submit', async (e) => {
   }
   $('newSubmit').disabled = true;
   try {
-    const snap = await api('POST', '/api/servers/new', {
+    const snap = await api('POST', newTarget ? `/api/nodes/${encodeURIComponent(newTarget)}/servers/new` : '/api/servers/new', {
       game: game.id,
       name: $('newName').value,
       installDir: $('newFolder').value,
@@ -3335,8 +3389,9 @@ $('newForm').addEventListener('submit', async (e) => {
     state.servers.set(snap.id, snap);
     $('newDialog').close();
     state.tab = 'overview';
+    renderSidebar();
     await selectServer(snap.id);
-    toast('Creating your server. Download progress is shown below.');
+    toast(snap.node ? `Creating your server on ${snap.node.name}. Download progress is shown below.` : 'Creating your server. Download progress is shown below.');
   } catch (err) {
     $('newError').textContent = err.message;
   } finally {
@@ -3350,21 +3405,37 @@ $('newDialog').addEventListener('click', (e) => {
 
 // ---------- import server ----------
 
-$('btnAddServer').addEventListener('click', () => {
+/** The Import dialog's game list for the chosen system. */
+function resetAddGames() {
+  const keep = $('addGame').value;
+  $('addGame').innerHTML = '';
+  for (const g of dialogGames()) $('addGame').add(new Option(g.name, g.id));
+  if (dialogGames().some((g) => g.id === keep)) $('addGame').value = keep;
+}
+$('btnAddServer').addEventListener('click', async () => {
   $('addError').textContent = '';
+  await useSystem('');
+  resetAddGames();
   $('addDialog').showModal();
+  await fillSystemPicker($('addSystem'), $('addSystemWrap'));
+});
+$('addSystem').addEventListener('change', async () => {
+  await useSystem($('addSystem').value);
+  $('addSystem').value = newTarget;
+  resetAddGames();
 });
 $('addCancel').addEventListener('click', () => $('addDialog').close());
 $('addForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   try {
-    const snap = await api('POST', '/api/servers', { game: $('addGame').value, name: $('addName').value, installDir: $('addInstall').value });
+    const snap = await api('POST', newTarget ? `/api/nodes/${encodeURIComponent(newTarget)}/servers` : '/api/servers', { game: $('addGame').value, name: $('addName').value, installDir: $('addInstall').value });
     state.servers.set(snap.id, snap);
     $('addDialog').close();
     $('addForm').reset();
     state.tab = 'settings';
+    renderSidebar();
     await selectServer(snap.id);
-    toast('Server added. Check its settings, then press Start.');
+    toast(snap.node ? `Server added on ${snap.node.name}. Check its settings, then press Start.` : 'Server added. Check its settings, then press Start.');
   } catch (err) {
     $('addError').textContent = err.message;
   }
@@ -4692,6 +4763,11 @@ const API_DOCS = [
     ['POST', '/api/settings/backup-copy/test', 'Test a folder: {"folder"} → free space', 'Panel settings'],
     ['POST', '/api/settings/backup-copy/sync', 'Copy every existing backup that isn\'t there yet (in the background)', 'Panel settings'],
     ['GET', '/api/nodes', 'Nodes (other systems) managed from this panel', 'Panel settings'],
+    ['GET', '/api/node-targets', 'Systems you can create servers on (nodes with Tavern Host, and whether they are online)', 'Create & import servers'],
+    ['GET', '/api/nodes/{node}/games', "A node's games and their settings fields (for creating a server there)", 'Create & import servers'],
+    ['GET', '/api/nodes/{node}/games/{game}/versions?from={type}', 'Versions a node can install', 'Create & import servers'],
+    ['POST', '/api/nodes/{node}/servers/new', 'Create a server on a node (same body as POST /api/servers/new); the answer has its id here (n~node~server)', 'Create & import servers'],
+    ['POST', '/api/nodes/{node}/servers', 'Import a server folder on a node (same body as POST /api/servers)', 'Create & import servers'],
     ['POST', '/api/nodes', 'Add a node: {"code":"thnode://…","name"?}', 'Panel settings'],
     ['PUT', '/api/nodes/{node}', 'Rename a node: {"name"}', 'Panel settings'],
     ['DELETE', '/api/nodes/{node}', 'Remove a node (its servers keep running there)', 'Panel settings'],
