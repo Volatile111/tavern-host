@@ -357,10 +357,12 @@ function reviewOf(list) {
     removals: p.removals.map((m) => m.name.replace(/_/g, ' ')),
     unavailable: p.unavailable ?? [],
     same: p.same,
+    // Mod settings the server owner sends (Valheim): what changes in the player's config files.
+    settings: (p.settings ?? []).map((s) => ({ file: s.file, section: s.section, key: s.key, value: s.value, from: s.from })),
   });
 }
 
-const hasChanges = (list) => list.some((p) => p.bepinex || p.changes.length || p.removals.length || p.unavailable?.length);
+const hasChanges = (list) => list.some((p) => p.bepinex || p.changes.length || p.removals.length || p.unavailable?.length || p.settings?.length);
 
 /** Installs the pending changes: clean ones, remembered approvals and the ones approved now. */
 async function applyPending(approveNow = []) {
@@ -380,7 +382,7 @@ async function applyPending(approveNow = []) {
       }
       const r = await sync.applyPrepared(dir, p, approved, log);
       summary.push(
-        `${p.manifest.server}: ${r.installed.length} installed, ${r.removed.length} removed${r.skipped.length ? `, skipped ${r.skipped.join(', ')}` : ''}`,
+        `${p.manifest.server}: ${r.installed.length} installed, ${r.removed.length} removed${r.settings.length ? `, ${r.settings.length} mod setting${r.settings.length === 1 ? '' : 's'} set` : ''}${r.skipped.length ? `, skipped ${r.skipped.join(', ')}` : ''}`,
       );
     }
   } finally {

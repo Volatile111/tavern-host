@@ -8,6 +8,7 @@ import * as vm from '../valheim-mods.ts';
 import { scanPackage } from '../modscan.ts';
 import { nexusFromFileName } from '../nexus.ts';
 import { activeIsVanilla } from './valheim-profiles.ts';
+import { listSettingsFiles, readSettings, writeSettings, sharedSettings } from './valheim-settings.ts';
 
 const SIDES = [
   { value: 'both', label: 'Server + players' },
@@ -184,6 +185,7 @@ export const valheimAddons: AddonSupport = {
   },
   list: items,
   install,
+  settings: { list: listSettingsFiles, read: readSettings, write: writeSettings },
   remove(record, id) {
     if (id.startsWith('loose:')) {
       // Only something directly in BepInEx/plugins that looseMods() lists (the id comes from the request).
@@ -247,6 +249,7 @@ export function shareSummary(record: ServerRecord) {
   const mods = Object.values(reg.mods);
   return {
     shared: shareManifest(record).mods.length,
+    settings: sharedSettings(record).length,
     vanilla: activeIsVanilla(record),
     serverOnly: mods.filter((m) => m.enabled && m.side === 'server').map((m) => m.name.replace(/_/g, ' ')),
     off: mods.filter((m) => !m.enabled).map((m) => m.name.replace(/_/g, ' ')),
@@ -307,5 +310,6 @@ export function shareManifest(record: ServerRecord) {
       file:
         m.source === 'hexium' || (m.source === 'upload' && existsSync(uploadCopy(record.id, vm.fullName(m), m.version))) ? `${vm.fullName(m)}-${m.version}.zip` : null,
     }));
-  return { server: record.name, game: 'valheim', bepinex: vanilla ? null : (reg.bepinex?.version ?? null), mods, generatedAt: Date.now() };
+  // Mod settings the owner sends to players (Tavern Client Mod Manager 0.5.1 and newer; older apps ignore them).
+  return { server: record.name, game: 'valheim', bepinex: vanilla ? null : (reg.bepinex?.version ?? null), mods, settings: sharedSettings(record), generatedAt: Date.now() };
 }

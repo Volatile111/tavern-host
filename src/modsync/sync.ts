@@ -9,6 +9,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import * as vm from '../valheim-mods.ts';
+import { parseCfg, setValues, checkChange, isCfgName } from '../bepinex-config.ts';
 
 export const VALHEIM_APP_ID = 892970;
 
@@ -122,11 +123,19 @@ export interface SharedMod {
   description: string;
   file: string | null;
 }
+/** A mod setting the server owner sends to players (Tavern Host 0.6.1 and newer): a value in BepInEx/config/<file>. */
+export interface SharedSetting {
+  file: string;
+  section: string;
+  key: string;
+  value: string;
+}
 export interface Manifest {
   server: string;
   game: string;
   bepinex: string | null;
   mods: SharedMod[];
+  settings: SharedSetting[];
   generatedAt: number;
 }
 
@@ -208,7 +217,61 @@ export function checkManifest(m: Manifest): Manifest {
     };
   });
   const bepinex = m.bepinex == null ? null : VERSION.test(String(m.bepinex)) ? String(m.bepinex) : null;
-  return { server: String(m.server ?? '').slice(0, 100), game: 'valheim', bepinex, mods, generatedAt: Number(m.generatedAt) || 0 };
+  return { server: String(m.server ?? '').slice(0, 100), game: 'valheim', bepinex, mods, settings: checkSettings(m.settings), generatedAt: Number(m.generatedAt) || 0 };
+}
+
+/**
+ * Settings from the server only ever change a value in a mod's config file: the file name must be a plain .cfg name in
+ * BepInEx/config (never BepInEx's own BepInEx.cfg), and names and values must stay on one line. Anything else is left out
+ * (a bad setting doesn't stop the mods from syncing).
+ */
+function checkSettings(list: unknown): SharedSetting[] {
+  if (!Array.isArray(list)) return [];
+  const out: SharedSetting[] = [];
+  for (const s of list.slice(0, 500)) {
+    if (!s || typeof s !== 'object') continue;
+    const x = { file: String(s.file ?? ''), section: String(s.section ?? '').trim(), key: String(s.key ?? '').trim(), value: String(s.value ?? '').trim() };
+    if (!isCfgName(x.file) || x.file.toLowerCase() === 'bepinex.cfg' || checkChange(x)) continue;
+    out.push(x);
+  }
+  return out;
+}
+
+/** A shared setting whose value differs from the player's file (from = their current value; null = not in the file). */
+export interface SettingChange extends SharedSetting {
+  from: string | null;
+}
+
+const cfgFile = (gameDir: string, file: string) => path.join(gameDir, 'BepInEx', 'config', file);
+
+/** Which of the server's settings would change the player's files. */
+export function planSettings(gameDir: string, settings: SharedSetting[]): SettingChange[] {
+  const files = new Map<string, Map<string, string>>();
+  const changes: SettingChange[] = [];
+  for (const s of settings) {
+    if (!files.has(s.file)) {
+      const f = cfgFile(gameDir, s.file);
+      const entries = existsSync(f) ? parseCfg(readFileSync(f, 'utf-8')).entries : [];
+      files.set(s.file, new Map(entries.map((e) => [`${e.section}\u0000${e.key}`, e.value])));
+    }
+    const have = files.get(s.file)!.get(`${s.section}\u0000${s.key}`);
+    if (have !== s.value) changes.push({ ...s, from: have ?? null });
+  }
+  return changes;
+}
+
+/** Writes the setting changes, one file at a time. A file that doesn't exist yet is created with just these values. */
+export function applySettings(gameDir: string, changes: SettingChange[]): string[] {
+  const byFile = new Map<string, SettingChange[]>();
+  for (const c of changes) byFile.set(c.file, [...(byFile.get(c.file) ?? []), c]);
+  const done: string[] = [];
+  for (const [file, list] of byFile) {
+    const f = cfgFile(gameDir, file);
+    mkdirSync(path.dirname(f), { recursive: true });
+    writeFileSync(f, setValues(existsSync(f) ? readFileSync(f, 'utf-8') : '', list));
+    done.push(...list.map((c) => `${c.key} = ${c.value} (${file})`));
+  }
+  return done;
 }
 
 // ---------- syncing ----------
@@ -278,6 +341,8 @@ export interface Prepared {
   same: number;
   /** Mods that couldn't be downloaded (the rest still sync): "Name: reason". */
   unavailable: string[];
+  /** Mod settings from the server that differ from the player's files. */
+  settings: SettingChange[];
 }
 
 /**
@@ -289,7 +354,7 @@ export async function prepareSync(gameDir: string, manifest: Manifest, link: Lin
   const plan = planSync(gameDir, manifest, link);
   const workDir = path.join(workRoot, `sync-${randomUUID().slice(0, 8)}`);
   mkdirSync(workDir, { recursive: true });
-  const prepared: Prepared = { link, manifest, workDir, bepinex: null, changes: [], removals: plan.remove, same: plan.same.length, unavailable: [] };
+  const prepared: Prepared = { link, manifest, workDir, bepinex: null, changes: [], removals: plan.remove, same: plan.same.length, unavailable: [], settings: planSettings(gameDir, manifest.settings) };
   if (plan.needsBepInEx) {
     const info = await vm.latestPackage(vm.BEPINEX_PACK.namespace, vm.BEPINEX_PACK.name);
     const version = manifest.bepinex ?? info.version;
@@ -354,7 +419,7 @@ export function canAutoApply(p: Prepared, approved: Set<string>) {
 /** Installs what's allowed: clean changes plus the ones the player approved. Blocked ones are never installed. */
 export async function applyPrepared(gameDir: string, p: Prepared, approved: Set<string>, log: (line: string) => void) {
   const id = linkId(p.link);
-  const done = { installed: [] as string[], skipped: [] as string[], removed: [] as string[] };
+  const done = { installed: [] as string[], skipped: [] as string[], removed: [] as string[], settings: [] as string[] };
   try {
     if (p.bepinex) {
       if (p.bepinex.scan.verdict === 'blocked') throw new Error(`BepInEx was not installed: ${p.bepinex.scan.summary}.`);
@@ -384,6 +449,14 @@ export async function applyPrepared(gameDir: string, p: Prepared, approved: Set<
       log(`Removing ${m.name} (the server no longer uses it)…`);
       vm.removeMod(gameDir, vm.fullName(m));
       done.removed.push(m.name);
+    }
+    // Settings last: planned before installing, so re-check against the files as they are now (a mod's own default
+    // config, just installed, may already have some of these values).
+    if (p.settings.length) {
+      for (const line of applySettings(gameDir, planSettings(gameDir, p.settings))) {
+        log(`Setting ${line}`);
+        done.settings.push(line);
+      }
     }
     return done;
   } finally {

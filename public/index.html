@@ -864,6 +864,20 @@
   </div>
 </dialog>
 
+<dialog id="modSettingsDialog" class="wide-dialog mod-settings-dialog">
+  <div class="dialog-body">
+    <h2 id="msTitle"></h2>
+    <p class="muted small-text" id="msSub"></p>
+    <p class="muted small-text">Changes are used when the server (re)starts. <b>To players</b>: players' Tavern Client Mod Manager sets that setting to the server's value in their own game every time it syncs, for settings that work on the player's side (for example Server devcommands' automatic god mode for admins). Anyone with the share link can see those values, so don't send passwords or keys.</p>
+    <div class="ms-tools">
+      <input id="msFilter" type="search" placeholder="Filter settings…" autocomplete="off" spellcheck="false">
+      <label class="toggle"><input type="checkbox" id="msOnlyShared"> Only the ones sent to players</label>
+    </div>
+    <div id="msBody" class="ms-body"></div>
+    <div class="form-actions"><span class="muted small-text" id="msStatus"></span><div class="spacer"></div><button id="msCancel">Close</button><button class="primary" id="msSave">Save</button></div>
+  </div>
+</dialog>
+
 <dialog id="aboutDialog">
   <div class="dialog-body about">
     <h2><img src="/logo.svg" alt="" width="32" height="32"> Tavern Host <span class="muted" id="aboutVersion"></span></h2>

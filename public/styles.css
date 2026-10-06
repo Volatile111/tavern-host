@@ -535,6 +535,24 @@ dialog.perm-dialog { width: min(1000px, calc(100vw - 32px)); max-width: none; }
 .side-select { width: auto; font-size: 12.5px; padding: 4px 8px; }
 .type-badge.dep { color: var(--muted); }
 .type-badge.manual { color: var(--gold); }
+/* Mod settings (Valheim BepInEx config files) */
+.settings-files { margin-top: 14px; }
+.settings-files h4 { margin: 0 0 4px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.settings-file-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.mod-settings-dialog { width: min(900px, 96vw); }
+.ms-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0; }
+.ms-tools input[type="search"] { flex: 1; min-width: 200px; }
+.ms-body { max-height: 58vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 4px 12px 10px; }
+.ms-section { margin: 14px 0 4px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.ms-row { display: grid; grid-template-columns: 1fr minmax(140px, 260px) auto; align-items: center; gap: 12px; padding: 8px 8px; border-radius: 8px; border-left: 3px solid transparent; }
+.ms-row + .ms-row { border-top: 1px solid var(--border); }
+.ms-row.changed { border-left-color: var(--accent); background: var(--panel-2); }
+.ms-row.shared .ms-share { color: #86efac; }
+.ms-key { font-weight: 600; overflow-wrap: anywhere; }
+.ms-desc { white-space: pre-line; margin: 2px 0; }
+.ms-row .toggle { margin: 0; font-size: 13px; white-space: nowrap; }
+.ms-row select, .ms-row input:not([type="checkbox"]) { width: 100%; }
+@media (max-width: 700px) { .ms-row { grid-template-columns: 1fr; } }
 .installed-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .installed-head h3 { margin: 0 auto 0 0; }
 /* Resources card */

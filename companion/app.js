@@ -734,6 +734,16 @@ function showReview(review, game = 'valheim') {
     }
     for (const r of srv.removals) body.append(el('div', 'change', `− Remove ${r} (the server no longer uses it)`));
     for (const u of srv.unavailable ?? []) body.append(el('div', 'change blocked', `⚠ Can't download ${u}. Ask the server owner to check it in Tavern Host (Mods → Share mods with players). The other mods still install.`));
+    // Mod settings the server owner sends: only these values change in the player's config files.
+    for (const s of srv.settings ?? []) {
+      const row = el('div', 'change');
+      const info = el('div');
+      const title = el('div', 'name', `⚙ ${s.key}: ${s.from == null ? '' : `${s.from === '' ? '(empty)' : s.from} → `}${s.value === '' ? '(empty)' : s.value}`);
+      title.append(el('span', 'badge', 'mod setting'));
+      info.append(title, el('div', 'muted small', `${s.file} · [${s.section}] · set by the server owner, every time you sync`));
+      row.append(info);
+      body.append(row);
+    }
   }
   $('reviewNote').textContent = needsTick ? 'Unticked mods are skipped (the others are still installed).' : '';
   $('reviewDialog').showModal();

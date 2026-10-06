@@ -420,6 +420,21 @@ export function modIcon(gameDir: string, full: string): string | null {
   return null;
 }
 
+/** Names (without .dll) of a mod's plugin DLLs, wherever it is (on or off). Used to tell which config file is whose. */
+export function modDlls(gameDir: string, full: string): string[] {
+  const out: string[] = [];
+  const walk = (dir: string, depth: number) => {
+    if (depth > 3 || !existsSync(dir)) return;
+    for (const f of readdirSync(dir)) {
+      const p = path.join(dir, f);
+      if (f.toLowerCase().endsWith('.dll')) out.push(f.slice(0, -4));
+      else if (statSync(p).isDirectory()) walk(p, depth + 1);
+    }
+  };
+  for (const dir of [pluginDir(gameDir, full), disabledDir(gameDir, full)]) walk(dir, 0);
+  return out;
+}
+
 /** Mods that are required by other installed mods (can't be removed without breaking them). */
 export function dependents(gameDir: string, full: string): string[] {
   const reg = loadRegistry(gameDir);

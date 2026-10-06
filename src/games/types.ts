@@ -144,6 +144,20 @@ export interface AddonSupport {
    * world_resource_packs.json; the top wins). `type` picks the list; `ids` are the active items in the new order.
    */
   reorder?(record: ServerRecord, type: string, ids: string[]): void;
+  /**
+   * Mod settings files (Valheim: BepInEx/config/*.cfg), edited from the Mods tab. `mod` ties a file to an installed item
+   * (its id) so the item gets a Settings button. Settings marked `shared` are sent to players through the share link.
+   */
+  settings?: {
+    list(record: ServerRecord): { file: string; plugin: string | null; version: string | null; mod: string | null; settings: number; shared: number }[];
+    read(record: ServerRecord, file: string): unknown;
+    write(
+      record: ServerRecord,
+      file: string,
+      values: { section: string; key: string; value: string }[],
+      shared: { section: string; key: string }[],
+    ): { changed: number; shared: number; sharedBefore: number };
+  };
   /** Games that can keep addons in more than one place (Bedrock: server folder or world folder). */
   locations?: {
     options: { value: string; label: string; help: string }[];

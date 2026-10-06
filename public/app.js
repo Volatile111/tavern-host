@@ -4717,7 +4717,10 @@ const API_DOCS = [
     ['PUT', '/api/servers/{id}/addons/update-settings', 'Change them: {"channel":"beta","auto":true} (beta/alpha files only count when newer than the newest release)', 'Manage mods / plugins / addons'],
     ['POST', '/api/servers/{id}/addons/setup', 'Turn on modding (Valheim: installs BepInEx; permanent)', 'Manage mods / plugins / addons'],
     ['POST', '/api/servers/{id}/addons/{item}/side', 'Who gets a mod (Valheim: {"side":"both|server|clients"}; Minecraft Java mod servers: {"side":"both|server"}). server = not shared with players', 'Manage mods / plugins / addons'],
-    ['PUT', '/api/servers/{id}/addons/location', 'Where new addons go (games with more than one addon folder): {"location"}', 'Manage mods / plugins / addons'],
+    ['GET', '/api/servers/{id}/addons/settings', 'Valheim: mod settings files in BepInEx/config: {files:[{file, plugin, version, mod, settings, shared}]} (mod = the installed mod it belongs to, if known)', 'Manage mods / plugins / addons'],
+    ['GET', '/api/servers/{id}/addons/settings/{file}', 'Valheim: one settings file: {entries:[{section, key, value, description, type, default, options, multi, range, shared}]}', 'Manage mods / plugins / addons'],
+    ['PUT', '/api/servers/{id}/addons/settings/{file}', 'Valheim: change values and choose what players get: {"values":[{"section","key","value"}],"shared":[{"section","key"}]} (shared = the full list sent to players through the share link)', 'Manage mods / plugins / addons'],
+    ['PUT', '/api/servers/{id}/addons/location','Where new addons go (games with more than one addon folder): {"location"}', 'Manage mods / plugins / addons'],
     ['POST', '/api/servers/{id}/addons/{item}/move', 'Move one addon to the other folder: {"to"}', 'Manage mods / plugins / addons'],
     ['POST', '/api/servers/{id}/addons/move-all', 'Move every addon to one folder: {"to"}', 'Manage mods / plugins / addons'],
     ['GET', '/api/servers/{id}/addons/{item}/icon', "An addon's icon (PNG)", 'See the server'],
@@ -5484,6 +5487,7 @@ function renderShareSummary(body, s) {
     return;
   }
   body.appendChild(el('p', s.shared ? 'ok-text' : 'warn-text', s.vanilla ? 'A vanilla profile is active: players get no mods (their app removes the ones it added).' : s.shared ? `Players get ${s.shared} mod${s.shared === 1 ? '' : 's'}.` : 'Players get no mods yet: nothing on this server can be shared.'));
+  if (s.settings) body.appendChild(el('p', 'muted small-text', `Players also get ${s.settings} mod setting${s.settings === 1 ? '' : 's'} (chosen with "To players" in a mod's Settings). Needs Tavern Client Mod Manager 0.5.1 or newer.`));
   if (s.loader && !s.loaderVersion) body.appendChild(el('p', 'warn-banner', "Tavern Host doesn't know which loader version this server runs (it wasn't installed by Tavern Host). Players' app syncs the mods but can't set the loader up, so players install it themselves."));
   if (s.manual?.length) {
     const box = el('div', 'warn-banner');
@@ -5659,7 +5663,194 @@ function renderAddons() {
   if (!addonState.packs.length) list.appendChild(el('p', 'muted', `No ${addonState.labels.plural} installed yet.`));
   else if (addonState.ordered) renderOrderedAddons(list);
   else for (const p of addonState.packs) list.appendChild(addonRow(p));
+  renderOtherSettingsFiles(list);
 }
+
+/** Settings files no installed mod could be matched to (mods added by hand, files left by removed mods). */
+function renderOtherSettingsFiles(list) {
+  if (!addonState.settingsFiles) return;
+  const ids = new Set(addonState.packs.map((p) => p.id));
+  const others = addonState.settingsFiles.filter((f) => !f.mod || !ids.has(f.mod));
+  const box = el('div', 'settings-files');
+  if (others.length) {
+    box.appendChild(el('h4', null, 'Other mod settings files'));
+    box.appendChild(el('p', 'muted small-text', "Settings files Tavern Host couldn't match to a mod above (mods added by hand, or files left by removed mods)."));
+    const row = el('div', 'settings-file-list');
+    for (const f of others) {
+      const b = el('button', 'small', `${f.plugin ?? f.file}${f.shared ? ` · ${f.shared} to players` : ''}`);
+      b.title = `Edit ${f.file}`;
+      b.addEventListener('click', () => openModSettings(f.file));
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+  }
+  if (addonState.packs.length) box.appendChild(el('p', 'muted small-text', "A mod's Settings button appears after the server has started with it once (that's when the mod writes its settings file)."));
+  list.appendChild(box);
+}
+
+// ---------- mod settings (Valheim: BepInEx config files) ----------
+// Each setting can be sent to players: their Tavern Client Mod Manager writes the server's value into their own copy of
+// the file when it syncs. Needed for player-side settings, such as Server devcommands' automatic god mode for admins.
+
+let msState = null; // { server, data, edits: Map(id -> value), shared: Set(id) }
+const msId = (e) => `${e.section}\u0000${e.key}`;
+const msSplit = (id) => {
+  const [section, key] = id.split('\u0000');
+  return { section, key };
+};
+
+async function openModSettings(file) {
+  let data;
+  try {
+    data = await api('GET', `/api/servers/${state.selected}/addons/settings/${encodeURIComponent(file)}`);
+  } catch (err) {
+    return toast(err.message, true);
+  }
+  msState = { server: state.selected, data, edits: new Map(), shared: new Set(data.entries.filter((e) => e.shared).map(msId)) };
+  $('msFilter').value = '';
+  $('msOnlyShared').checked = false;
+  renderModSettings();
+  $('modSettingsDialog').showModal();
+}
+
+function msControl(e, onChange) {
+  const cur = msState.edits.get(msId(e)) ?? e.value;
+  if (e.type === 'Boolean') {
+    const lab = el('label', 'toggle');
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.checked = cur.toLowerCase() === 'true';
+    cb.addEventListener('change', () => onChange(cb.checked ? 'true' : 'false'));
+    lab.append(cb, document.createTextNode(' On'));
+    return lab;
+  }
+  if (e.options && !e.multi) {
+    const sel = el('select');
+    for (const o of e.options.includes(cur) ? e.options : [cur, ...e.options]) {
+      const opt = el('option', null, o);
+      opt.value = o;
+      sel.appendChild(opt);
+    }
+    sel.value = cur;
+    sel.addEventListener('change', () => onChange(sel.value));
+    return sel;
+  }
+  const input = el('input');
+  const numeric = /^(U?Int(16|32|64)?|S?Byte|Single|Double|Decimal)$/.test(e.type ?? '');
+  input.type = numeric ? 'number' : 'text';
+  if (numeric) {
+    input.step = /^(Single|Double|Decimal)$/.test(e.type) ? 'any' : '1';
+    if (e.range) {
+      input.min = String(e.range.min);
+      input.max = String(e.range.max);
+    }
+  }
+  if (e.multi && e.options) input.placeholder = e.options.join(', ');
+  input.value = cur;
+  input.spellcheck = false;
+  input.addEventListener('input', () => onChange(input.value.trim()));
+  return input;
+}
+
+function msStatus() {
+  const changed = msState.edits.size;
+  const before = msState.data.entries.filter((e) => e.shared).map(msId);
+  const sharedChanged = before.length !== msState.shared.size || before.some((id) => !msState.shared.has(id));
+  $('msStatus').textContent = [changed ? `${changed} changed` : '', sharedChanged ? 'players list changed' : '', `${msState.shared.size} sent to players`].filter(Boolean).join(' · ');
+  $('msSave').disabled = !changed && !sharedChanged;
+  return changed || sharedChanged;
+}
+
+function renderModSettings() {
+  const { data } = msState;
+  $('msTitle').textContent = `${data.plugin ?? data.file} settings`;
+  $('msSub').textContent = [data.version ? `v${data.version}` : null, `BepInEx/config/${data.file}`].filter(Boolean).join(' · ');
+  const body = $('msBody');
+  body.innerHTML = '';
+  const q = $('msFilter').value.trim().toLowerCase();
+  const onlyShared = $('msOnlyShared').checked;
+  let section = null;
+  let shown = 0;
+  for (const e of data.entries) {
+    const id = msId(e);
+    if (onlyShared && !msState.shared.has(id)) continue;
+    if (q && !`${e.section} ${e.key} ${e.description}`.toLowerCase().includes(q)) continue;
+    if (e.section !== section) {
+      section = e.section;
+      body.appendChild(el('h4', 'ms-section', section));
+    }
+    shown++;
+    const row = el('div', 'ms-row');
+    const mark = () => {
+      row.classList.toggle('changed', msState.edits.has(id));
+      row.classList.toggle('shared', msState.shared.has(id));
+    };
+    const info = el('div', 'ms-info');
+    const name = el('div', 'ms-key', e.key);
+    if (e.type) name.appendChild(el('span', 'type-badge', e.type));
+    info.appendChild(name);
+    if (e.description) info.appendChild(el('div', 'muted small-text ms-desc', e.description));
+    const hints = [e.default != null ? `Default: ${e.default === '' ? '(empty)' : e.default}` : null, e.range ? `${e.range.min} to ${e.range.max}` : null, e.multi && e.options ? 'several allowed, separated by ", "' : null];
+    info.appendChild(el('div', 'muted small-text', hints.filter(Boolean).join(' · ')));
+    row.appendChild(info);
+    row.appendChild(
+      msControl(e, (v) => {
+        if (v === e.value) msState.edits.delete(id);
+        else msState.edits.set(id, v);
+        mark();
+        msStatus();
+      }),
+    );
+    const share = el('label', 'toggle ms-share');
+    share.title = "Players' Tavern Client Mod Manager sets this to the server's value in their own game every time it syncs.";
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.checked = msState.shared.has(id);
+    cb.addEventListener('change', () => {
+      if (cb.checked) msState.shared.add(id);
+      else msState.shared.delete(id);
+      mark();
+      msStatus();
+    });
+    share.append(cb, document.createTextNode(' To players'));
+    row.appendChild(share);
+    mark();
+    body.appendChild(row);
+  }
+  if (!shown) body.appendChild(el('p', 'muted', data.entries.length ? 'No settings match.' : 'This file has no settings.'));
+  msStatus();
+}
+
+$('msFilter').addEventListener('input', renderModSettings);
+$('msOnlyShared').addEventListener('change', renderModSettings);
+$('msCancel').addEventListener('click', () => {
+  if (msStatus() && !confirm('Close without saving your changes?')) return;
+  $('modSettingsDialog').close();
+});
+$('modSettingsDialog').addEventListener('cancel', (e) => {
+  if (msStatus() && !confirm('Close without saving your changes?')) e.preventDefault();
+});
+$('msSave').addEventListener('click', async () => {
+  const values = [...msState.edits].map(([id, value]) => ({ ...msSplit(id), value }));
+  const shared = [...msState.shared].map(msSplit);
+  $('msSave').disabled = true;
+  try {
+    const r = await api('PUT', `/api/servers/${msState.server}/addons/settings/${encodeURIComponent(msState.data.file)}`, { values, shared });
+    msState.data = r;
+    msState.edits.clear();
+    msState.shared = new Set(r.entries.filter((e) => e.shared).map(msId));
+    if (msState.server === state.selected) {
+      addonState.settingsFiles = r.files;
+      renderAddons();
+      if (values.length) noteRestart();
+    }
+    renderModSettings();
+    toast(values.length && r.running ? 'Saved. Restart the server to use the new settings.' : 'Settings saved');
+  } catch (err) {
+    toast(err.message, true);
+    msStatus();
+  }
+});
 
 // ---------- load order (Bedrock) ----------
 // Bedrock loads a world's packs in the order of world_resource_packs.json / world_behavior_packs.json. Like the game's
@@ -5859,6 +6050,14 @@ function addonRow(p, compact = false) {
       link.title = p.curseforge ? `Stop checking ${p.curseforge.name} on CurseForge for updates` : 'Find this addon on CurseForge so Tavern Host can update it';
       link.addEventListener('click', () => (p.curseforge ? unlinkCurseforge(p, packUrl) : linkCurseforge(p, packUrl)));
       actions.appendChild(link);
+    }
+    // Its settings file (Valheim: BepInEx/config), once the server has run the mod and it wrote one.
+    const cfg = !compact && addonState.settingsFiles?.find((f) => f.mod === p.id);
+    if (cfg) {
+      const b = el('button', 'small ghost', cfg.shared ? `Settings · ${cfg.shared} to players` : 'Settings');
+      b.title = `Edit ${cfg.file}${cfg.shared ? ` (${cfg.shared} setting${cfg.shared === 1 ? '' : 's'} sent to players)` : ''}`;
+      b.addEventListener('click', () => openModSettings(cfg.file));
+      actions.appendChild(b);
     }
     // Who needs it (Valheim): server + players / server only / players only.
     if (addonState.sides && p.side) {

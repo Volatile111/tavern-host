@@ -1,5 +1,18 @@
 # Changelog
 
+## Tavern Host 0.6.1
+
+**New**
+- **Mod settings for Valheim servers.** Mods with a settings file (BepInEx/config) get a **Settings** button on the Mods tab once the server has started with them. Every setting is shown with its description, default and allowed values; saving changes only those lines in the file, and the mod uses them at the next restart. Files Tavern Host can't match to a mod are listed under **Other mod settings files**.
+- **Send settings to players.** Tick **To players** on a setting and players' Tavern Client Mod Manager (0.5.1 or newer) sets it to the server's value in their own game every time they sync. That's how settings that only work on the player's side are set from the server, for example Server devcommands' automatic debug, god and fly mode for admins (devcommands only switch on for players on the server's admin list). Anyone with the share link can see those values, so don't send passwords or keys.
+- Seeing and changing mod settings needs **Manage mods** (settings files can hold webhooks or passwords). Changes are written to the activity log.
+
+## Tavern Client Mod Manager 0.5.1
+
+**New**
+- **Mod settings from the server.** When a Valheim server's owner sends mod settings (Tavern Host 0.6.1), syncing sets them in your game's config files. Only those settings change; the rest of each file stays yours. The review shows each one before it's applied.
+- A server can only change values in mods' settings files: never BepInEx's own settings, and nothing outside the BepInEx config folder.
+
 ## Tavern Host 0.6.0
 
 **New**

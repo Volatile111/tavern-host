@@ -1083,6 +1083,8 @@ route('GET', '/api/servers/:id/addons', async (ctx) => {
     moddingOff: addons.isOn ? !addons.isOn(inst.record) : false,
     sides: addons.sides ?? null,
     canCheckUpdates: !!addons.checkUpdates,
+    // Mod settings files (Valheim), for people who can change mods (they can hold secrets).
+    settingsFiles: addons.settings && can(ctx.principal!, 'addons.manage', inst.id) ? addons.settings.list(inst.record) : null,
     // Listed only: another tool manages them (Satisfactory Mod Manager).
     readOnly: !!addons.readOnly,
     // Added by ID or link instead of a file (Space Engineers: Steam Workshop).
@@ -1142,6 +1144,52 @@ route('POST', '/api/servers/:id/addons/:pack/side', async (ctx) => {
   }
   audit(p, `set ${ctx.params[1]} on "${inst.record.name}" to ${side}`);
   return { packs: addons.list(inst.record) };
+});
+
+// Mod settings files (Valheim: BepInEx/config). Reading needs Manage mods too: mod configs can hold secrets (webhooks,
+// passwords). Saving works while the server runs; the mod reads the file when the server starts.
+function settingsOf(id: string) {
+  const { inst, addons } = addonsOf(id);
+  if (!addons.settings) throw new HttpError(404, `${inst.module.name} servers have no mod settings files.`);
+  return { inst, settings: addons.settings };
+}
+
+route('GET', '/api/servers/:id/addons/settings', async (ctx) => {
+  needServer(ctx, 'addons.manage', ctx.params[0]);
+  const { inst, settings } = settingsOf(ctx.params[0]);
+  return { files: settings.list(inst.record) };
+});
+
+route('GET', '/api/servers/:id/addons/settings/:file', async (ctx) => {
+  needServer(ctx, 'addons.manage', ctx.params[0]);
+  const { inst, settings } = settingsOf(ctx.params[0]);
+  try {
+    return settings.read(inst.record, decodeURIComponent(ctx.params[1]));
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+});
+
+route('PUT', '/api/servers/:id/addons/settings/:file', async (ctx) => {
+  const p = needServer(ctx, 'addons.manage', ctx.params[0]);
+  const { inst, settings } = settingsOf(ctx.params[0]);
+  const file = decodeURIComponent(ctx.params[1]);
+  const { values, shared } = await readBody(ctx.req);
+  if (!Array.isArray(values) || !Array.isArray(shared) || values.length > 2000 || shared.length > 2000) throw new HttpError(400, 'Send {"values":[{section,key,value}],"shared":[{section,key}]}.');
+  let r;
+  try {
+    r = settings.write(
+      inst.record,
+      file,
+      values.map((v: any) => ({ section: String(v?.section ?? ''), key: String(v?.key ?? ''), value: String(v?.value ?? '') })),
+      shared.map((v: any) => ({ section: String(v?.section ?? ''), key: String(v?.key ?? '') })),
+    );
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+  const what = [r.changed ? `changed ${r.changed} setting${r.changed === 1 ? '' : 's'}` : '', r.shared !== r.sharedBefore ? `now sends ${r.shared} to players` : ''].filter(Boolean).join(', ');
+  if (what) audit(p, `${what} in ${file} on "${inst.record.name}"`);
+  return { ...settings.read(inst.record, file) as object, files: settings.list(inst.record), running: inst.isRunning };
 });
 
 // ---------- mod sharing with players (Tavern Client Mod Manager) ----------
@@ -2619,6 +2667,7 @@ function permFor(method: string, sub: string): { server?: ServerPerm; also?: Ser
     [/^\/backups\/[^/]+$/, null, 'backups.delete'],
     [/^\/share/, 'addons.share', 'addons.share'],
     [/^\/addons\/check-updates$/, null, 'view'],
+    [/^\/addons\/settings/, 'addons.manage', 'addons.manage'],
     [/^\/addons/, 'view', 'addons.manage'],
     [/^\/tasks\/[^/]+\/run$/, null, 'tasks.run'],
     [/^\/tasks/, 'view', 'tasks.edit'],

@@ -5,7 +5,7 @@
   "extraMetadata": {
     "name": "tavern-client-mod-manager",
     "productName": "Tavern Client Mod Manager",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "main": "companion/main.js"
   },
   "files": ["companion/**", "dist/valheim-mods.js", "dist/zip.js", "dist/modscan.js", "dist/nexus.js", "dist/modsync/**", "package.json"],
