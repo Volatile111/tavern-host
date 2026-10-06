@@ -12,7 +12,12 @@ contextBridge.exposeInMainWorld('modsync', {
   addLink: (raw) => call('add-link', String(raw)),
   removeLink: (raw) => call('remove-link', String(raw)),
   /** Downloads and safety-checks every change; returns what the review screen shows. Installs nothing. */
-  prepare: () => call('prepare'),
+  prepare: (game) => call('prepare', game === 'java' ? 'java' : 'valheim'),
+  /** Minecraft: sets up the launcher for a followed server (loader, profile, server list); returns its status. */
+  mcSetup: (raw) => call('mc-setup', String(raw)),
+  mcOpenFolder: (raw) => call('mc-open-folder', String(raw)),
+  /** Opens an allowed outside link (mod pages, loader installers, smmanager://). */
+  openExternal: (url) => call('open-external', String(url)),
   /** Installs clean changes plus the ones approved (list of "Author-Mod@version"). */
   apply: (approveNow) => call('apply', Array.isArray(approveNow) ? approveNow.map(String) : []),
   cancel: () => call('cancel'),

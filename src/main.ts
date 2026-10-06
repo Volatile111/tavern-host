@@ -18,7 +18,8 @@ import * as files from './files.ts';
 import * as serverFiles from './server-files.ts';
 import { listBackups, deleteBackup, backupsFolder, getCopySettings, setCopySettings, testCopyFolder, listCopies, copyFolderFor, copyAllToOffsite, bringBackCopy } from './backups.ts';
 import { applyRemote, remoteStatus, addFirewallRule, certFingerprint, type RemoteConfig } from './remote.ts';
-import { shareManifest, installFromHexium, ensureHexiumCopy, placeOnServer, adoptManualMods, shareSummary } from './games/valheim-addons.ts';
+import { installFromHexium, ensureHexiumCopy, placeOnServer, adoptManualMods } from './games/valheim-addons.ts';
+import { shareManifest, shareSummary, sharedFile, canShare } from './share.ts';
 import { parseHexiumUrl, setLoaderEnabled, bepinexStatus } from './valheim-mods.ts';
 import { profilesInfo, createProfile, updateProfile, deleteProfile, applyProfile, ensureDefaultProfile } from './games/valheim-profiles.ts';
 
@@ -1086,7 +1087,7 @@ route('GET', '/api/servers/:id/addons', async (ctx) => {
     readOnly: !!addons.readOnly,
     // Added by ID or link instead of a file (Space Engineers: Steam Workshop).
     canAddById: !!addons.addById,
-    share: inst.record.game === 'valheim' ? { enabled: !!shareToken(inst.id) } : null,
+    share: canShare(inst.record.game) ? { enabled: !!shareToken(inst.id) } : null,
     locations: addons.locations
       ? { options: addons.locations.options, current: addons.locations.get(inst.record), paths: addons.locations.describe(inst.record) }
       : null,
@@ -1158,7 +1159,7 @@ function serverForToken(token: string) {
   const entry = Object.entries(shareTokens()).find(([, t]) => t.length === token.length && timingSafeEqual(Buffer.from(t), Buffer.from(token)));
   if (!entry) throw new HttpError(404, 'This mod link is no longer valid. Ask the server owner for a new one.');
   const inst = getInstance(entry[0]);
-  if (inst.record.game !== 'valheim') throw new HttpError(404, 'Not a Valheim server.');
+  if (!canShare(inst.record.game)) throw new HttpError(404, 'This server has no shared mod list.');
   return inst;
 }
 
@@ -1173,7 +1174,7 @@ async function shareInfo(serverId: string) {
   return {
     enabled: !!token,
     links,
-    summary: shareSummary(getInstance(serverId).record),
+    summary: shareSummary(getInstance(serverId)),
     publicLink: ip ? make(`${ip}:${config.remote.port}`) : null,
     remote: { enabled: config.remote.enabled, listening: status.listening, port: config.remote.port },
     hasCertificate: !!fingerprint,
@@ -1188,7 +1189,7 @@ route('GET', '/api/servers/:id/share', async (ctx) => {
 route('POST', '/api/servers/:id/share', async (ctx) => {
   const p = needServer(ctx, 'addons.share', ctx.params[0]);
   const inst = getInstance(ctx.params[0]);
-  if (inst.record.game !== 'valheim') throw new HttpError(400, 'Mod sharing is for Valheim servers.');
+  if (!canShare(inst.record.game)) throw new HttpError(400, `${inst.module.name} servers have no share link.`);
   const { enabled, newLink } = await readBody(ctx.req);
   const tokens = shareTokens();
   if (enabled === false) delete tokens[inst.id];
@@ -1201,12 +1202,20 @@ route('POST', '/api/servers/:id/share', async (ctx) => {
 // Public (token only): the mod list, and uploaded mod files that aren't on Thunderstore.
 route('GET', '/api/share/:token', async (ctx) => {
   const inst = serverForToken(ctx.params[0]);
-  return shareManifest(inst.record);
+  return shareManifest(inst);
 });
 
 route('GET', '/api/share/:token/file/:name', async (ctx) => {
   const inst = serverForToken(ctx.params[0]);
   const name = ctx.params[1];
+  // Other games (Minecraft Java mods): only enabled mods players need.
+  if (inst.record.game !== 'valheim') {
+    const f = sharedFile(inst, name);
+    if (!f) throw new HttpError(404, 'That file is not shared.');
+    ctx.res.writeHead(200, { 'Content-Type': f.type, 'Content-Length': statSync(f.file).size, 'Cache-Control': 'no-store' });
+    await new Promise<void>((resolve) => createReadStream(f.file).on('error', () => resolve()).on('end', resolve).pipe(ctx.res));
+    return undefined;
+  }
   if (!/^[\w.-]+\.zip$/.test(name)) throw new HttpError(400, 'Bad file name.');
   // Hexium mods are fetched from Hexium the first time a players' app asks (see ensureHexiumCopy).
   await ensureHexiumCopy(inst.record, name).catch(() => false);

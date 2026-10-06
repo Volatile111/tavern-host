@@ -70,7 +70,7 @@ export function parseLink(text: string): Link {
 }
 
 /** GET over HTTPS, trusting only the certificate whose fingerprint is in the link. */
-function pinnedGet(link: Link, urlPath: string, asBuffer = false): Promise<Buffer | string> {
+export function pinnedGet(link: Link, urlPath: string, asBuffer = false): Promise<Buffer | string> {
   return new Promise((resolve, reject) => {
     const req = https.get(
       {
@@ -134,6 +134,52 @@ export async function fetchManifest(link: Link): Promise<Manifest> {
   const m = JSON.parse(String(await pinnedGet(link, `/api/share/${link.token}`))) as Manifest;
   if (m.game !== 'valheim' || !Array.isArray(m.mods)) throw new Error('That link is not a Valheim mod list.');
   return checkManifest(m);
+}
+
+// ---------- links for any game (Tavern Host 0.6.0 and newer share every game) ----------
+
+export interface Join {
+  port: number;
+  protocol: string;
+}
+/** What every share link has, whatever the game. */
+export interface AnyManifest {
+  server: string;
+  game: string;
+  gameName: string;
+  /** sync: the app keeps the mods matched (Valheim, modded Minecraft Java); links: mods to install with another tool (Satisfactory); info: join details only. */
+  mode: 'sync' | 'links' | 'info';
+  join: Join | null;
+  note: string;
+  raw: Record<string, unknown>;
+}
+
+const GAMES: Record<string, string> = {
+  valheim: 'Valheim',
+  java: 'Minecraft Java',
+  bedrock: 'Minecraft Bedrock',
+  satisfactory: 'Satisfactory',
+  terraria: 'Terraria (tModLoader)',
+  spaceengineers: 'Space Engineers',
+};
+
+/** Reads a link of any game. Only the common fields are checked here; each game's sync checks its own part. */
+export async function fetchAnyManifest(link: Link): Promise<AnyManifest> {
+  const m = JSON.parse(String(await pinnedGet(link, `/api/share/${link.token}`))) as Record<string, unknown>;
+  const game = String(m.game ?? '');
+  if (!GAMES[game]) throw new Error(`That link is for a game this version of the app doesn't know (${game.slice(0, 40) || 'unknown'}). Check for an update (About & help).`);
+  const j = m.join as Partial<Join> | null | undefined;
+  const port = Number(j?.port);
+  return {
+    server: String(m.server ?? '').slice(0, 100),
+    game,
+    gameName: GAMES[game],
+    // Links from Tavern Host before 0.6.0 are Valheim-only and have no mode.
+    mode: game === 'valheim' ? 'sync' : m.mode === 'sync' || m.mode === 'links' ? m.mode : 'info',
+    join: Number.isInteger(port) && port > 0 && port < 65536 ? { port, protocol: j?.protocol === 'UDP' ? 'UDP' : 'TCP' } : null,
+    note: String(m.note ?? '').slice(0, 400),
+    raw: m,
+  };
 }
 
 // The list comes from someone else's server, so everything that ends up in a folder name, a file name or a web

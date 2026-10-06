@@ -114,8 +114,9 @@ function render() {
   // Server links
   const links = $('links');
   links.innerHTML = '';
-  if (!st.links.length) links.append(el('p', 'muted small', 'No servers yet.'));
-  for (const l of st.links) {
+  const valheimLinks = st.links.filter((l) => l.game === 'valheim');
+  if (!valheimLinks.length) links.append(el('p', 'muted small', 'No Valheim servers yet. Add one with its link above.'));
+  for (const l of valheimLinks) {
     const box = el('div', `link ${l.ok ? '' : 'bad'}`);
     const head = el('div', 'row');
     head.append(el('b', null, l.server ?? 'Server'));
@@ -215,6 +216,206 @@ function render() {
     const row = el('div', 'mod');
     row.append(el('div', null, f), el('span', 'muted small', 'added by hand (BepInEx/plugins)'));
     mods.append(row);
+  }
+  renderJava();
+  renderSatisfactory();
+  renderOther();
+  renderTabs();
+}
+
+// ---------- games ----------
+
+const OTHER_GAMES = ['bedrock', 'terraria', 'spaceengineers'];
+const tabOf = (game) => (OTHER_GAMES.includes(game) ? 'other' : game);
+let currentTab = (() => {
+  try {
+    return localStorage.getItem('tcmm-tab') || 'valheim';
+  } catch {
+    return 'valheim';
+  }
+})();
+
+function setTab(tab) {
+  currentTab = tab;
+  try {
+    localStorage.setItem('tcmm-tab', tab);
+  } catch {}
+  renderTabs();
+}
+
+function renderTabs() {
+  for (const b of $('gameTabs').querySelectorAll('button')) {
+    const tab = b.dataset.game;
+    b.classList.toggle('active', tab === currentTab);
+    const n = st ? st.links.filter((l) => tabOf(l.game) === tab).length : 0;
+    b.querySelector('.tab-count')?.remove();
+    if (n) b.append(el('span', 'tab-count', String(n)));
+  }
+  for (const tab of ['valheim', 'java', 'satisfactory', 'other']) $(`view-${tab}`).hidden = tab !== currentTab;
+  // Sync now / Play are Valheim's (Minecraft has its own Sync button).
+  $('btnSync').hidden = $('btnPlay').hidden = currentTab !== 'valheim';
+}
+$('gameTabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-game]');
+  if (b) setTab(b.dataset.game);
+});
+
+/** The common top of a server box: name, a status pill, Remove. */
+function linkBox(l, pill) {
+  const box = el('div', `link ${l.ok ? '' : 'bad'}`);
+  const head = el('div', 'row');
+  head.append(el('b', null, l.server ?? 'Server'));
+  if (!l.ok) head.append(el('span', 'pill bad', 'unreachable'));
+  else if (pill) head.append(pill);
+  const rm = el('button', 'small ghost', 'Remove');
+  rm.addEventListener('click', async () => {
+    if (!confirm(`Stop following ${l.server ?? 'this server'}? Anything already installed stays.`)) return;
+    await api.removeLink(l.raw);
+    refresh();
+  });
+  head.append(el('span', 'spacer'), rm);
+  box.append(head);
+  if (!l.ok) box.append(el('div', 'error small', l.error));
+  return box;
+}
+
+/** "Join: host:port [Copy]". */
+function addressRow(l, label = 'Address') {
+  const row = el('div', 'row tight');
+  if (!l.address) return row;
+  const copy = el('button', 'small ghost', 'Copy');
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(l.address);
+      toast('Address copied');
+    } catch {
+      toast(l.address);
+    }
+  });
+  row.append(el('span', 'muted small', `${label}:`), el('code', 'address', l.address), copy);
+  return row;
+}
+
+function renderJava() {
+  const box = $('mcLinks');
+  box.innerHTML = '';
+  const list = st.links.filter((l) => l.game === 'java');
+  if (!list.length) box.append(el('p', 'muted small', 'No Minecraft Java servers yet. Add one with its link above.'));
+  for (const l of list) {
+    if (!l.ok || !l.java) {
+      const b = linkBox(l, l.ok ? el('span', 'pill ok', 'no mods needed') : null);
+      if (l.ok) {
+        b.append(addressRow(l));
+        if (l.note) b.append(el('div', 'muted small', l.note));
+      }
+      box.append(b);
+      continue;
+    }
+    const p = l.plan;
+    const changes = p.add.length + p.update.length + p.remove.length;
+    const b = linkBox(l, el('span', `pill ${changes ? 'todo' : 'ok'}`, changes ? `${changes} change${changes === 1 ? '' : 's'} to sync` : '✔ matched'));
+    const j = l.java;
+    const details = [];
+    for (const m of p.add) details.push(`+ ${m.name} ${m.version}`);
+    for (const m of p.update) details.push(`↑ ${m.name} ${m.from} → ${m.version}`);
+    for (const f of p.remove) details.push(`− ${f}`);
+    b.append(el('div', 'muted small', `${j.loader}${j.loaderVersion ? ` ${j.loaderVersion}` : ''} · Minecraft ${j.mcVersion} · ${j.mods} mod${j.mods === 1 ? '' : 's'} for players${details.length ? ` · ${details.join(' · ')}` : ''}`));
+    b.append(addressRow(l));
+    // Launcher: loader and profile.
+    const s = l.setup;
+    const setup = el('div', 'setup-box');
+    if (!j.loaderVersion) {
+      setup.append(el('div', 'warn small', `The server doesn't say which ${j.loader} version it runs, so the app can't set up the launcher. Install ${j.loader} for Minecraft ${j.mcVersion} yourself and point a launcher profile at the mods folder (Open mods folder).`));
+    } else if (!s.loaderReady && s.installerUrl) {
+      setup.append(el('div', 'warn small', `${j.loader} ${j.loaderVersion} isn't in your Minecraft Launcher yet. Download its installer, run it, choose "Install client" and press OK, then press "Check again". (The installer needs Java; if double-clicking it does nothing, install Java from adoptium.net first.)`));
+      const row = el('div', 'row tight');
+      const dl = el('button', 'small primary', `Download the ${j.loader} installer`);
+      dl.addEventListener('click', () => api.openExternal(s.installerUrl).catch((err) => toast(err.message, true)));
+      const again = el('button', 'small', 'Check again');
+      again.addEventListener('click', () => mcSetup(l, again));
+      row.append(dl, again);
+      setup.append(row);
+    } else if (!s.profile) {
+      setup.append(el('div', 'muted small', changes ? 'Sync to download the mods and add the server\'s profile to the Minecraft Launcher.' : 'The launcher profile is missing.'));
+      if (!changes) {
+        const make = el('button', 'small primary', 'Set up the launcher');
+        make.addEventListener('click', () => mcSetup(l, make));
+        setup.append(make);
+      }
+    } else {
+      setup.append(el('div', 'ok small', `✔ In the Minecraft Launcher as "${l.server} (Tavern)". Open the launcher, pick that profile under Installations or next to Play, and the server is in Multiplayer. Restart the launcher if it was open when the profile was added.`));
+    }
+    b.append(setup);
+    const own = l.installed.filter((x) => !x.fromServer);
+    if (own.length) b.append(el('div', 'muted small', `Your own jars in this folder (left alone): ${own.map((x) => x.file).join(', ')}`));
+    const actions = el('div', 'row tight');
+    const open = el('button', 'small ghost', 'Open mods folder');
+    open.addEventListener('click', () => api.mcOpenFolder(l.raw));
+    actions.append(open);
+    b.append(actions);
+    box.append(b);
+  }
+}
+
+async function mcSetup(l, btn) {
+  await busy(btn, 'Checking…', async () => {
+    try {
+      const s = await api.mcSetup(l.raw);
+      toast(s.profile ? `"${l.server} (Tavern)" is in the Minecraft Launcher` : 'The loader still isn\'t in the launcher', !s.profile);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+  refresh();
+}
+
+function renderSatisfactory() {
+  const box = $('sfLinks');
+  box.innerHTML = '';
+  const list = st.links.filter((l) => l.game === 'satisfactory');
+  if (!list.length) box.append(el('p', 'muted small', 'No Satisfactory servers yet. Add one with its link above.'));
+  for (const l of list) {
+    const mods = l.mods ?? [];
+    const b = linkBox(l, l.ok ? el('span', 'pill ok', mods.length ? `${mods.length} mod${mods.length === 1 ? '' : 's'}` : 'no mods') : null);
+    if (l.ok) {
+      b.append(addressRow(l, 'Server address'));
+      if (l.note) b.append(el('div', 'muted small', l.note));
+      for (const m of mods) {
+        const row = el('div', 'mod');
+        const info = el('div');
+        info.append(el('div', 'name', m.name), el('div', 'muted small', m.id === 'SML' ? `v${m.version} · the mod loader (SMM installs it with the mods)` : `v${m.version}`));
+        row.append(info);
+        const actions = el('div', 'row tight');
+        if (m.id !== 'SML') {
+          const smm = el('button', 'small primary', 'Install with SMM');
+          smm.title = 'Opens this mod in Satisfactory Mod Manager';
+          smm.addEventListener('click', () => api.openExternal(`smmanager://install?modID=${m.id}${/^[\w.\-+]{1,40}$/.test(m.version) ? `&version=${m.version}` : ''}`).catch((err) => toast(err.message, true)));
+          actions.append(smm);
+        }
+        const page = el('button', 'small ghost', 'ficsit.app');
+        page.addEventListener('click', () => api.openExternal(`https://ficsit.app/mod/${m.id}`).catch((err) => toast(err.message, true)));
+        actions.append(page);
+        row.append(actions);
+        b.append(row);
+      }
+      if (mods.length) b.append(el('div', 'muted small', "\"Install with SMM\" needs Satisfactory Mod Manager installed (smm.ficsit.app). Install the version shown, the same as the server's."));
+    }
+    box.append(b);
+  }
+}
+
+function renderOther() {
+  const box = $('otherLinks');
+  box.innerHTML = '';
+  const list = st.links.filter((l) => OTHER_GAMES.includes(l.game));
+  if (!list.length) box.append(el('p', 'muted small', 'No servers for these games yet. Add one with its link above.'));
+  for (const l of list) {
+    const b = linkBox(l, l.ok ? el('span', 'pill ok', l.gameName) : null);
+    if (l.ok) {
+      b.append(addressRow(l));
+      if (l.note) b.append(el('div', 'muted small', l.note));
+    }
+    box.append(b);
   }
 }
 
@@ -456,16 +657,17 @@ $('linkForm').addEventListener('submit', async (e) => {
   const raw = $('linkInput').value.trim();
   if (!raw) return;
   const ok = confirm(
-    'Follow this server?\n\nThe server owner will decide which mods run in your game. Mods are programs that run on your PC, so only follow servers whose owner you trust.\n\nEvery mod is safety-checked before it is installed (Windows Defender, Thunderstore status and a scan for malware-like behaviour). Anything that is not from Thunderstore, or that the check flags, waits for your approval.',
+    'Follow this server?\n\nFor Valheim and modded Minecraft, the server owner decides which mods run in your game. Mods are programs that run on your PC, so only follow servers whose owner you trust.\n\nEvery mod is safety-checked before it is installed (Windows Defender, plus Thunderstore or Modrinth). Anything not from those sites, or that the check flags, waits for your approval.',
   );
   if (!ok) return;
   const btn = e.submitter;
   await busy(btn, 'Checking…', async () => {
     try {
-      const name = await api.addLink(raw);
+      const r = await api.addLink(raw);
       $('linkInput').value = '';
-      toast(`Following ${name}`);
-      log(`Added server ${name}.`);
+      toast(`Following ${r.server} (${r.gameName})`);
+      log(`Added ${r.gameName} server ${r.server}.`);
+      setTab(tabOf(r.game));
       await refresh();
     } catch (err) {
       toast(err.message, true);
@@ -483,7 +685,11 @@ function scanBadge(scan) {
   return el('span', `pill ${cls}`, label);
 }
 
-function showReview(review) {
+function showReview(review, game = 'valheim') {
+  $('reviewIntro').textContent =
+    game === 'java'
+      ? "Every mod was downloaded from the server and checked (Windows Defender, and whether Modrinth has the exact same file). Nothing has been installed yet."
+      : 'Every mod was downloaded and safety-checked (Windows Defender, Thunderstore status and a scan for malware-like behaviour). Nothing has been installed yet.';
   const body = $('reviewBody');
   body.innerHTML = '';
   let needsTick = 0;
@@ -498,10 +704,17 @@ function showReview(review) {
       const row = el('div', `change ${c.blocked ? 'blocked' : ''}`);
       const info = el('div');
       const title = el('div', 'name', `${c.action === 'add' ? '+ Add' : '↑ Update'} ${c.name} ${c.from ? `${c.from} → ` : ''}${c.version}`);
-      title.append(el('span', `badge ${c.source === 'upload' ? 'own' : ''}`, c.source === 'upload' ? 'not on Thunderstore' : c.source === 'hexium' ? `by ${c.author} · Hexium` : `by ${c.author}`));
+      const badge =
+        c.source === 'upload' ? 'not on Thunderstore'
+        : c.source === 'server' ? 'not on Modrinth'
+        : c.source === 'modrinth' ? 'on Modrinth'
+        : c.source === 'hexium' ? `by ${c.author} · Hexium`
+        : `by ${c.author}`;
+      title.append(el('span', `badge ${c.source === 'upload' || c.source === 'server' ? 'own' : ''}`, badge));
       info.append(title, el('div', 'muted small', c.scan.summary));
       for (const f of c.scan.flags) info.append(el('div', `small ${f.level === 'high' ? 'error' : 'warn'}`, `${f.level === 'high' ? '⛔' : '⚠'} ${f.text}${f.file ? ` (${f.file})` : ''}`));
       if (c.source === 'upload' && !c.scan.flags.length) info.append(el('div', 'small warn', '⚠ Uploaded by the server owner, not from Thunderstore: nobody else has checked it.'));
+      if (c.source === 'server' && !c.scan.flags.length) info.append(el('div', 'small warn', "⚠ Sent by the server owner, and Modrinth doesn't have this exact file: nobody else has checked it."));
       row.append(info);
       const right = el('div', 'change-right');
       right.append(scanBadge(c.scan));
@@ -535,14 +748,14 @@ async function prepareAndReview(thenLaunch) {
         await api.launch();
         return;
       }
-      if (!st?.links.length) {
+      if (!st?.links.some((l) => l.game === 'valheim')) {
         if (thenLaunch) await api.launch();
-        else toast('Add a server link first');
+        else toast('Add a Valheim server link first');
         return;
       }
-      const r = await api.prepare();
+      const r = await api.prepare('valheim');
       if (!r.changes) {
-        const empty = st.links.filter((l) => l.ok && !l.manifest.mods.length).map((l) => l.server);
+        const empty = st.links.filter((l) => l.game === 'valheim' && l.ok && !l.manifest.mods.length).map((l) => l.server);
         log(empty.length ? `${empty.join(', ')} isn't sharing any mods right now.` : 'Your mods already match the server.');
         if (thenLaunch) await api.launch();
         else toast(empty.length ? `${empty.join(', ')} isn't sharing any mods (the owner can check why in Tavern Host)` : 'Already up to date', !!empty.length);
@@ -586,8 +799,28 @@ $('btnPlay').addEventListener('click', () => prepareAndReview(true));
 api.on('needs-review', (r) => {
   toast('A server added or changed mods: please review them');
   afterReview = null;
-  showReview(r.review);
+  showReview(r.review, r.game);
 });
+
+// Minecraft Java: download + check, then review (or report nothing to do).
+$('btnMcSync').addEventListener('click', () =>
+  busy($('btnMcSync'), 'Checking…', async () => {
+    try {
+      if (!st?.links.some((l) => l.game === 'java' && l.java)) return toast('No modded Minecraft servers to sync');
+      const r = await api.prepare('java');
+      if (!r.changes) {
+        log('Your Minecraft mods already match the servers.');
+        toast('Already up to date');
+        return;
+      }
+      afterReview = null;
+      showReview(r.review, 'java');
+    } catch (err) {
+      toast(err.message, true);
+    }
+    refresh();
+  }),
+);
 
 $('autoSync').addEventListener('change', () => api.setAuto($('autoSync').checked));
 $('btnBrowse').addEventListener('click', () => api.browse());
@@ -702,4 +935,5 @@ document.addEventListener('click', (e) => {
 });
 applyHue(loadHue(), false);
 
+renderTabs();
 refresh();

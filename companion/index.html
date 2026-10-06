@@ -39,6 +39,51 @@
     <button class="small primary" id="btnInstallAppUpdate">Update now</button>
   </div>
 
+  <section class="card">
+    <h3>Add a server</h3>
+    <p class="muted">Paste the link from the server owner (their Tavern Host → the server's Mods tab → Share mods with players). Works for Valheim, Minecraft Java, Satisfactory, Minecraft Bedrock, Terraria (tModLoader) and Space Engineers servers.</p>
+    <form id="linkForm" class="row">
+      <input id="linkInput" placeholder="thmods://192.168.1.50:8191/…" spellcheck="false" autocomplete="off">
+      <button class="primary" type="submit">Add server</button>
+    </form>
+    <p class="muted small">Want to run your own server? <a href="https://github.com/Volatile111/tavern-host/releases/latest" target="_blank" rel="noopener">Get Tavern Host</a>: the free server panel these share links come from.</p>
+  </section>
+
+  <nav class="game-tabs" id="gameTabs">
+    <button type="button" data-game="valheim">Valheim</button>
+    <button type="button" data-game="java">Minecraft Java</button>
+    <button type="button" data-game="satisfactory">Satisfactory</button>
+    <button type="button" data-game="other">Other servers</button>
+  </nav>
+
+  <div class="view" id="view-java" hidden>
+    <section class="card">
+      <div class="head">
+        <h3>Minecraft Java servers</h3>
+        <button class="small primary" id="btnMcSync">⟳ Sync now</button>
+      </div>
+      <p class="muted small">Each modded server gets its own profile in the Minecraft Launcher, with its own folder, so its mods never mix with your other worlds. Mods follow the server: added, updated and removed with it. Jars you add to that folder yourself are left alone. Servers without mods just need the normal launcher (their address is shown here).</p>
+      <div id="mcLinks"></div>
+    </section>
+  </div>
+
+  <div class="view" id="view-satisfactory" hidden>
+    <section class="card">
+      <h3>Satisfactory servers</h3>
+      <p class="muted small">Satisfactory mods are installed with <a href="https://smm.ficsit.app/" target="_blank" rel="noopener">Satisfactory Mod Manager</a> (SMM), which handles versions and dependencies. Each mod below opens in SMM; install the same ones as the server, then join through Server Manager in the game.</p>
+      <div id="sfLinks"></div>
+    </section>
+  </div>
+
+  <div class="view" id="view-other" hidden>
+    <section class="card">
+      <h3>Other servers</h3>
+      <p class="muted small">These games download what a server needs by themselves when you join, so there's nothing to sync. Here are the join details.</p>
+      <div id="otherLinks"></div>
+    </section>
+  </div>
+
+  <div class="view" id="view-valheim">
   <section class="card" id="gameCard">
     <h3>Valheim</h3>
     <div id="gameInfo"></div>
@@ -59,12 +104,7 @@
       <h3>Servers</h3>
       <label class="toggle"><input type="checkbox" id="autoSync"> Keep my mods matched automatically</label>
     </div>
-    <p class="muted">Paste the link from the server owner (their Tavern Host → Mods tab → Share mods with players). Your mods will follow that server's: new ones are added, updated ones are updated and removed ones are removed. Mods you add yourself are left alone.</p>
-    <p class="muted small">Want to run your own server? <a href="https://github.com/Volatile111/tavern-host/releases/latest" target="_blank" rel="noopener">Get Tavern Host</a>: the free server panel these share links come from.</p>
-    <form id="linkForm" class="row">
-      <input id="linkInput" placeholder="thmods://192.168.1.50:8191/…" spellcheck="false" autocomplete="off">
-      <button class="primary" type="submit">Add server</button>
-    </form>
+    <p class="muted">Your Valheim mods follow these servers: new ones are added, updated ones are updated and removed ones are removed. Mods you add yourself are left alone.</p>
     <div id="links"></div>
   </section>
 
@@ -98,6 +138,7 @@
     </details>
     <div id="mods"></div>
   </section>
+  </div>
 
   <section class="card">
     <h3>Activity</h3>
@@ -106,7 +147,7 @@
 </main>
 <dialog id="reviewDialog" class="review">
   <h2>Review mod changes</h2>
-  <p class="muted small">Every mod was downloaded and safety-checked (Windows Defender, Thunderstore status and a scan for malware-like behaviour). Nothing has been installed yet.</p>
+  <p class="muted small" id="reviewIntro">Every mod was downloaded and safety-checked (Windows Defender, Thunderstore status and a scan for malware-like behaviour). Nothing has been installed yet.</p>
   <div id="reviewBody"></div>
   <div class="row review-actions">
     <span class="muted small" id="reviewNote"></span>
@@ -128,7 +169,7 @@
   </div>
   <p class="muted small">Created by CorruptedVariant. Free software under the <a href="https://github.com/Volatile111/tavern-host/blob/main/LICENSE" target="_blank" rel="noopener">GNU GPL v3</a>:
     you may use, change and share it, and the <a href="https://github.com/Volatile111/tavern-host/tree/main/companion" target="_blank" rel="noopener">source code</a> is public. It comes with no warranty.
-    Not affiliated with Iron Gate, Coffee Stain, Thunderstore, Hexium or Nexus Mods.</p>
+    Not affiliated with Iron Gate, Mojang/Microsoft, Coffee Stain, Re-Logic, Keen Software House, Thunderstore, Modrinth, Hexium or Nexus Mods.</p>
   <div class="row review-actions"><span class="spacer"></span><button id="aboutClose">Close</button></div>
 </dialog>
 <div id="toast"></div>

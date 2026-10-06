@@ -164,6 +164,8 @@ export interface JarInfo {
   mcCheck: ((mc: string) => boolean) | null;
   /** Client-only mods do nothing on a server (and can crash it). */
   clientOnly: boolean;
+  /** Server-side only mods: players don't need them (Fabric "environment": "server", Forge IGNORE_SERVER_VERSION). */
+  serverOnly: boolean;
   iconEntry: string | null;
   /** Has a bungee.yml (a BungeeCord plugin, possibly alongside a Bukkit plugin.yml in one jar). */
   bungee: boolean;
@@ -177,7 +179,7 @@ export function readJar(file: string): JarInfo {
   const cached = infoCache.get(cacheKey);
   if (cached) return cached;
   const base = path.basename(file).replace(/\.disabled$/i, '').replace(/\.jar$/i, '');
-  const info: JarInfo = { loader: 'unknown', id: base.toLowerCase(), name: base, version: '', description: '', authors: '', mcRange: null, mcCheck: null, clientOnly: false, iconEntry: null, bungee: false };
+  const info: JarInfo = { loader: 'unknown', id: base.toLowerCase(), name: base, version: '', description: '', authors: '', mcRange: null, mcCheck: null, clientOnly: false, serverOnly: false, iconEntry: null, bungee: false };
   const zip = new ZipFile(file);
   try {
     const manifestVersion = /Implementation-Version:\s*(\S+)/.exec(zip.text('META-INF/MANIFEST.MF') ?? '')?.[1] ?? '';
@@ -203,6 +205,7 @@ export function readJar(file: string): JarInfo {
         mcRange: mcDep ? (Array.isArray(mcDep) ? mcDep.join(' or ') : String(mcDep)).replace(/-(?=\s|$)/g, '') : null,
         mcCheck: mcDep ? (mc: string) => fabricMatches(mcDep, mc) : null,
         clientOnly: j.environment === 'client',
+        serverOnly: j.environment === 'server',
         iconEntry: typeof j.icon === 'string' ? j.icon : j.icon && typeof j.icon === 'object' ? (Object.values(j.icon).at(-1) as string) : null,
       });
     } else if (quilt) {
@@ -227,6 +230,7 @@ export function readJar(file: string): JarInfo {
         mcRange: mcDep?.versionRange ?? null,
         mcCheck: mcDep?.versionRange ? (mc: string) => mavenMatches(mcDep.versionRange, mc) : null,
         clientOnly: /true/i.test(t.root.clientSideOnly ?? ''),
+        serverOnly: /IGNORE_SERVER_VERSION/.test(mod.displayTest ?? t.root.displayTest ?? ''),
         iconEntry: mod.logoFile ?? t.root.logoFile ?? null,
       });
     } else if (paperYml || pluginYml) {
@@ -311,7 +315,7 @@ function checkCompat(info: JarInfo, flavor: string, mc: string): Warning[] {
 // ---------- the server's mods/plugins ----------
 
 interface Registry {
-  files: Record<string, { installedAt: number; source: string | null }>;
+  files: Record<string, { installedAt: number; source: string | null; side?: 'both' | 'server' }>;
 }
 
 function folderOf(record: ServerRecord) {
@@ -342,6 +346,8 @@ export interface ContentItem {
   mcRange: string | null;
   warnings: Warning[];
   file: string;
+  side?: string;
+  sideHelp?: string;
 }
 
 export function listContent(record: ServerRecord): ContentItem[] {
@@ -377,9 +383,48 @@ export function listContent(record: ServerRecord): ContentItem[] {
       mcRange: info.mcRange,
       warnings: checkCompat(info, flavor, mc),
       file: f,
+      // Mod servers only: whether players need it too (shared with the Tavern Client Mod Manager).
+      ...(contentKind(record) === 'mods' ? sideOf(reg, id, info) : {}),
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export const MOD_SIDES = [
+  { value: 'both', label: 'Server + players' },
+  { value: 'server', label: 'Server only' },
+];
+const MOD_SIDE_HELP: Record<string, string> = {
+  both: 'Players need it too: it is shared with the Tavern Client Mod Manager.',
+  server: "Only the server runs it; players don't need it.",
+};
+
+function sideOf(reg: Registry, id: string, info: JarInfo) {
+  const side = reg.files[id]?.side ?? (info.serverOnly ? 'server' : 'both');
+  return { side, sideHelp: MOD_SIDE_HELP[side] + (reg.files[id]?.side ? '' : info.serverOnly ? ' (the mod says it is server-side only)' : '') };
+}
+
+export function setContentSide(record: ServerRecord, id: string, side: string) {
+  if (contentKind(record) !== 'mods') throw new Error('Only mods are shared with players.');
+  if (!MOD_SIDE_HELP[side]) throw new Error('Unknown side.');
+  const item = findItem(record, id);
+  const reg = loadRegistry(record);
+  reg.files[item.id] = { installedAt: reg.files[item.id]?.installedAt ?? Date.now(), source: reg.files[item.id]?.source ?? null, side: side as 'both' | 'server' };
+  saveRegistry(record, reg);
+}
+
+/** Enabled mods players need (Fabric/Forge/NeoForge servers), for the share link. */
+export function sharedMods(record: ServerRecord) {
+  if (contentKind(record) !== 'mods') return [];
+  return listContent(record)
+    .filter((m) => m.enabled && m.side !== 'server' && m.typeClass !== 'bad')
+    .map((m) => ({ id: m.id, name: m.name, version: m.version, file: m.file, size: statSync(path.join(folderOf(record), m.file)).size }));
+}
+
+/** Full path of a mod jar players may download (only enabled, shared ones). */
+export function sharedModFile(record: ServerRecord, name: string): string | null {
+  const m = sharedMods(record).find((x) => x.file === name);
+  return m ? path.join(folderOf(record), m.file) : null;
 }
 
 function findItem(record: ServerRecord, id: string) {
@@ -473,8 +518,10 @@ export async function installContent(record: ServerRecord, file: string, source:
       const problems = checkCompat(info, flavor, mc);
       const blocked = problems.some((w) => w.level === 'error');
       copyFileSync(jar, path.join(dir, blocked ? `${target}.disabled` : target));
+      // An update keeps the side chosen for the old file.
+      const keptSide = reg.files[old?.id ?? '']?.side;
       delete reg.files[old?.id ?? ''];
-      reg.files[target] = { installedAt: Date.now(), source };
+      reg.files[target] = { installedAt: Date.now(), source, ...(keptSide ? { side: keptSide } : {}) };
       const action = !old ? 'installed' : old.version && info.version && old.version !== info.version ? 'updated' : 'reinstalled';
       result.installed.push({ name: info.name, type: LOADER_NAMES[info.loader], version: info.version, action: blocked ? `${action}-off` : action });
       for (const w of problems) result.warnings.push(`${w.level === 'error' ? '⛔' : '⚠'} ${info.name}: ${w.text}`);

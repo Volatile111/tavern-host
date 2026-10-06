@@ -185,7 +185,7 @@ curl -X POST -H "Authorization: Bearer th_…" -H "Content-Type: application/jso
 | `GET /api/servers/{id}/addons/update-settings` | Bedrock addon updates: {channel: "release"\|"beta"\|"alpha", auto} | See the server |
 | `PUT /api/servers/{id}/addons/update-settings` | Change them: {"channel":"beta","auto":true} (beta/alpha files only count when newer than the newest release) | Manage mods / plugins / addons |
 | `POST /api/servers/{id}/addons/setup` | Turn on modding (Valheim: installs BepInEx; permanent) | Manage mods / plugins / addons |
-| `POST /api/servers/{id}/addons/{item}/side` | Valheim: who gets a mod: {"side":"both\|server\|clients"} (server = not shared with players) | Manage mods / plugins / addons |
+| `POST /api/servers/{id}/addons/{item}/side` | Who gets a mod (Valheim: {"side":"both\|server\|clients"}; Minecraft Java mod servers: {"side":"both\|server"}). server = not shared with players | Manage mods / plugins / addons |
 | `PUT /api/servers/{id}/addons/location` | Where new addons go (games with more than one addon folder): {"location"} | Manage mods / plugins / addons |
 | `POST /api/servers/{id}/addons/{item}/move` | Move one addon to the other folder: {"to"} | Manage mods / plugins / addons |
 | `POST /api/servers/{id}/addons/move-all` | Move every addon to one folder: {"to"} | Manage mods / plugins / addons |
@@ -195,10 +195,10 @@ curl -X POST -H "Authorization: Bearer th_…" -H "Content-Type: application/jso
 | `POST /api/servers/{id}/addons/hexium` | Valheim: install from Hexium with dependencies: {"input":"https://valheim.hexium.gg/mods/Author/Mod"} or {"namespace","name","version"?} | Manage mods / plugins / addons |
 | `POST /api/servers/{id}/addons/nexus` | Valheim: install a Nexus Mods file: {"input":"nxm://…"} (needs the Nexus key in Integrations; a mod page address needs Premium) | Manage mods / plugins / addons |
 | `POST /api/servers/{id}/addons/adopt` | Valheim: take over mods added without Tavern Host (r2modman, by hand) so they can be shared: {adopted, skipped} | Manage mods / plugins / addons |
-| `GET /api/servers/{id}/share` | Players' mod link (Valheim): links, public link, what's shared (summary), Remote access status | Share mods with players |
+| `GET /api/servers/{id}/share` | Players' share link (Valheim, Minecraft Java, Satisfactory, Bedrock, Terraria tModLoader, Space Engineers): links, public link, what's shared (summary, with mode sync\|links\|info), Remote access status | Share mods with players |
 | `POST /api/servers/{id}/share` | Sharing on/off or a new link: {"enabled":true,"newLink":false} | Share mods with players |
-| `GET /api/share/{token}` | The shared mod list the players' Tavern Client Mod Manager reads (Remote access port) | The share link token (no login) |
-| `GET /api/share/{token}/file/{name}` | Download a shared mod file (uploads, Nexus and Hexium copies) | The share link token (no login) |
+| `GET /api/share/{token}` | What the players' Tavern Client Mod Manager reads (Remote access port): {server, game, gameName, mode, join:{port,protocol}, note, mods…}. Minecraft Java mod servers add loader, mcVersion, loaderVersion | The share link token (no login) |
+| `GET /api/share/{token}/file/{name}` | Download a shared mod file (Valheim uploads, Nexus and Hexium copies; Minecraft Java mod jars players need) | The share link token (no login) |
 
 ## Tasks
 

@@ -12,9 +12,25 @@
 - **Bedrock addon updates from CurseForge.** Addons installed from CurseForge are linked to their project automatically; for others (from MCPEDL or elsewhere), use **Link to CurseForge…** on the addon. **Check for updates** then finds newer files, on the channel you pick: releases only, releases + beta, or releases + beta + alpha (betas and alphas only when they're newer than the newest release). **Update automatically** checks every 6 hours and installs them by itself (loaded at the next restart). Needs a CurseForge API key in Settings → Integrations.
 - **Valheim world modifiers, fully customisable**, like a .bat file: start from any difficulty preset and change any modifier on top of it, now including **Normal** (e.g. Hardcore with a normal death penalty). The world settings are grouped under **World modifiers** in Settings, and **Other world keys** passes any other key with -setkey (e.g. nocraftcost, skillgainrate 200).
 - Valheim with crossplay on: Tavern Host explains that the local IP can't be used to join (Valheim's crossplay only finds the server by its public address), and what to use instead.
+- **Share links for every game** (Mods tab → Share mods with players), for the Tavern Client Mod Manager 0.5.0:
+  - **Minecraft Java (Fabric, Forge, NeoForge)**: players' app sets up the same loader in their Minecraft Launcher, in a separate profile, and keeps the mods matched with the server. Each mod has **Server + players** or **Server only** (mods that say they're server-side only start as Server only).
+  - **Satisfactory**: players see the server's mods with versions, each one opening in Satisfactory Mod Manager.
+  - **Bedrock, Terraria (tModLoader), Space Engineers and Minecraft servers without mods**: these games download what they need when a player joins, so the link gives the join details.
 
 **Fixed**
 - Security: Tavern Vault calls that would hand out something secret (for example an encryption recovery key, a password or a token) always need **Manage storage**, even when they're named like a read-only call.
+
+## Tavern Client Mod Manager 0.5.0
+
+**New**
+- **More games.** Server links now work for Valheim, Minecraft Java, Satisfactory, Minecraft Bedrock, Terraria (tModLoader) and Space Engineers servers (from Tavern Host 0.6.0). Paste any link in **Add a server**; each game has its own tab.
+- **Minecraft Java (Fabric, Forge, NeoForge)**: each modded server gets its own Minecraft Launcher profile and folder, so its mods never mix with your other worlds. The server's mods are added, updated and removed with it; jars you add to that folder yourself are left alone. The server is in Multiplayer straight away. Fabric is set up automatically; for Forge and NeoForge the app gives you the right installer to run once.
+- Minecraft mods are checked before they're installed: Windows Defender, and whether Modrinth has the exact same file. Files Modrinth doesn't know wait for your approval.
+- **Satisfactory**: the server's mods with versions, each opening in Satisfactory Mod Manager to install.
+- **Other games**: the server's address to copy, and how the game gets its mods.
+
+**Fixed**
+- Sync results no longer show twice in Activity.
 
 ## Tavern Host 0.5.3
 

@@ -4716,7 +4716,7 @@ const API_DOCS = [
     ['GET', '/api/servers/{id}/addons/update-settings', 'Bedrock addon updates: {channel: "release"|"beta"|"alpha", auto}', 'See the server'],
     ['PUT', '/api/servers/{id}/addons/update-settings', 'Change them: {"channel":"beta","auto":true} (beta/alpha files only count when newer than the newest release)', 'Manage mods / plugins / addons'],
     ['POST', '/api/servers/{id}/addons/setup', 'Turn on modding (Valheim: installs BepInEx; permanent)', 'Manage mods / plugins / addons'],
-    ['POST', '/api/servers/{id}/addons/{item}/side', 'Valheim: who gets a mod: {"side":"both|server|clients"} (server = not shared with players)', 'Manage mods / plugins / addons'],
+    ['POST', '/api/servers/{id}/addons/{item}/side', 'Who gets a mod (Valheim: {"side":"both|server|clients"}; Minecraft Java mod servers: {"side":"both|server"}). server = not shared with players', 'Manage mods / plugins / addons'],
     ['PUT', '/api/servers/{id}/addons/location', 'Where new addons go (games with more than one addon folder): {"location"}', 'Manage mods / plugins / addons'],
     ['POST', '/api/servers/{id}/addons/{item}/move', 'Move one addon to the other folder: {"to"}', 'Manage mods / plugins / addons'],
     ['POST', '/api/servers/{id}/addons/move-all', 'Move every addon to one folder: {"to"}', 'Manage mods / plugins / addons'],
@@ -4726,10 +4726,10 @@ const API_DOCS = [
     ['POST', '/api/servers/{id}/addons/hexium', 'Valheim: install from Hexium with dependencies: {"input":"https://valheim.hexium.gg/mods/Author/Mod"} or {"namespace","name","version"?}', 'Manage mods / plugins / addons'],
     ['POST', '/api/servers/{id}/addons/nexus', 'Valheim: install a Nexus Mods file: {"input":"nxm://…"} (needs the Nexus key in Integrations; a mod page address needs Premium)', 'Manage mods / plugins / addons'],
     ['POST', '/api/servers/{id}/addons/adopt', 'Valheim: take over mods added without Tavern Host (r2modman, by hand) so they can be shared: {adopted, skipped}', 'Manage mods / plugins / addons'],
-    ['GET', '/api/servers/{id}/share', "Players' mod link (Valheim): links, public link, what's shared (summary), Remote access status", 'Share mods with players'],
+    ['GET', '/api/servers/{id}/share', "Players' share link (Valheim, Minecraft Java, Satisfactory, Bedrock, Terraria tModLoader, Space Engineers): links, public link, what's shared (summary, with mode sync|links|info), Remote access status", 'Share mods with players'],
     ['POST', '/api/servers/{id}/share', 'Sharing on/off or a new link: {"enabled":true,"newLink":false}', 'Share mods with players'],
-    ['GET', '/api/share/{token}', "The shared mod list the players' Tavern Client Mod Manager reads (Remote access port)", 'The share link token (no login)'],
-    ['GET', '/api/share/{token}/file/{name}', 'Download a shared mod file (uploads, Nexus and Hexium copies)', 'The share link token (no login)'],
+    ['GET', '/api/share/{token}', "What the players' Tavern Client Mod Manager reads (Remote access port): {server, game, gameName, mode, join:{port,protocol}, note, mods…}. Minecraft Java mod servers add loader, mcVersion, loaderVersion", 'The share link token (no login)'],
+    ['GET', '/api/share/{token}/file/{name}', 'Download a shared mod file (Valheim uploads, Nexus and Hexium copies; Minecraft Java mod jars players need)', 'The share link token (no login)'],
   ]],
   ['Tasks', [
     ['GET', '/api/servers/{id}/tasks', 'Scheduled tasks with next/last run', 'See the server'],
@@ -5467,11 +5467,25 @@ async function loadShare() {
 }
 
 /** How many mods players get, and which ones they don't (with the reason and, where there is one, the fix). */
+const SHARE_INTRO = {
+  sync: 'Players install <b>Tavern Client Mod Manager</b>, paste this link once, and their game gets the same mods as this server: new mods are added, updated mods are updated and removed mods are removed (their own extra mods are left alone). "Server only" mods aren\'t shared.',
+  java: 'Players install <b>Tavern Client Mod Manager</b> and paste this link once. It sets up the same mod loader in their Minecraft launcher (a separate profile, so their other worlds and mods are untouched) and keeps its mods the same as this server\'s. "Server only" mods aren\'t shared.',
+  links: 'Players install <b>Tavern Client Mod Manager</b> and paste this link once. It shows this server\'s mods with versions, and each one opens in <b>Satisfactory Mod Manager</b> to install, so players don\'t have to hunt for them.',
+  info: "This game downloads what it needs by itself when a player joins. The link gives players this server's join details in <b>Tavern Client Mod Manager</b>, next to their other servers.",
+};
+
 function renderShareSummary(body, s) {
   if (!s) return;
+  $('shareIntro').innerHTML = s.mode === 'sync' && s.loader ? SHARE_INTRO.java : SHARE_INTRO[s.mode] ?? SHARE_INTRO.sync;
+  if (s.mode === 'info') return;
   const names = (list) => (list.length > 6 ? `${list.slice(0, 6).join(', ')} and ${list.length - 6} more` : list.join(', '));
+  if (s.mode === 'links') {
+    body.appendChild(el('p', s.shared ? 'ok-text' : 'warn-text', s.shared ? `Players see ${s.shared} mod${s.shared === 1 ? '' : 's'} to install with Satisfactory Mod Manager.` : 'No mods on this server yet.'));
+    return;
+  }
   body.appendChild(el('p', s.shared ? 'ok-text' : 'warn-text', s.vanilla ? 'A vanilla profile is active: players get no mods (their app removes the ones it added).' : s.shared ? `Players get ${s.shared} mod${s.shared === 1 ? '' : 's'}.` : 'Players get no mods yet: nothing on this server can be shared.'));
-  if (s.manual.length) {
+  if (s.loader && !s.loaderVersion) body.appendChild(el('p', 'warn-banner', "Tavern Host doesn't know which loader version this server runs (it wasn't installed by Tavern Host). Players' app syncs the mods but can't set the loader up, so players install it themselves."));
+  if (s.manual?.length) {
     const box = el('div', 'warn-banner');
     box.appendChild(el('p', null, `${s.manual.length} mod${s.manual.length === 1 ? ' was' : 's were'} added outside Tavern Host (by r2modman, another mod manager or by hand), so ${s.manual.length === 1 ? "it isn't" : "they aren't"} shared: ${names(s.manual)}. Tavern Host can take ${s.manual.length === 1 ? 'it' : 'them'} over if ${s.manual.length === 1 ? "it's" : "they're"} on Thunderstore or Hexium.`));
     if (hasPerm('addons.manage')) {
@@ -5498,7 +5512,7 @@ function renderShareSummary(body, s) {
     }
     body.appendChild(box);
   }
-  if (s.uploadsMissing.length) body.appendChild(el('p', 'warn-banner', `Players can't get ${names(s.uploadsMissing)}: the uploaded file isn't kept on this system any more. Upload the zip again.`));
+  if (s.uploadsMissing?.length) body.appendChild(el('p', 'warn-banner', `Players can't get ${names(s.uploadsMissing)}: the uploaded file isn't kept on this system any more. Upload the zip again.`));
   if (s.serverOnly.length) body.appendChild(el('p', 'muted small-text', `Not shared ("Server only"): ${names(s.serverOnly)}. Change a mod to "Server + players" in the list below if players need it too.`));
   if (s.off.length) body.appendChild(el('p', 'muted small-text', `Not shared (switched off): ${names(s.off)}.`));
 }

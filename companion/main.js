@@ -13,6 +13,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, '..');
 const lib = (p) => import(pathToFileURL(path.join(root, 'dist', p)).href);
 const sync = await lib('modsync/sync.js');
+const mc = await lib('modsync/minecraft.js');
 const vm = await lib('valheim-mods.js');
 const scan = await lib('modscan.js');
 const nexus = await lib('nexus.js');
@@ -199,16 +200,52 @@ function createWindow() {
 
 // ---------- state for the page ----------
 
+// Links saved before the app knew other games are Valheim links.
+const gameOf = (entry) => entry.game ?? 'valheim';
+const linksFor = (game) => settings.links.filter((l) => gameOf(l) === game);
+
+/** The address players join with: the link's host and the game's port. */
+function joinAddress(link, any) {
+  if (!any.join) return null;
+  return any.game === 'java' && any.join.port === 25565 ? link.host : `${link.host}:${any.join.port}`;
+}
+
+/** Satisfactory: mods to install with Satisfactory Mod Manager (names are checked: they go into smmanager:// links). */
+function checkSatisfactory(any) {
+  const list = Array.isArray(any.raw.mods) ? any.raw.mods.slice(0, 1000) : [];
+  return list
+    .filter((m) => /^[A-Za-z0-9_]{1,64}$/.test(String(m?.id ?? '')))
+    .map((m) => ({ id: String(m.id), name: String(m.name ?? m.id).slice(0, 100), version: String(m.version ?? '').slice(0, 40) }));
+}
+
 async function linkStatus(entry) {
+  const game = gameOf(entry);
   try {
     const link = sync.parseLink(entry.raw);
-    const manifest = await sync.fetchManifest(link);
-    const dir = gameDir();
-    const plan = dir ? sync.planSync(dir, manifest, link) : null;
-    entry.server = manifest.server;
-    return { raw: entry.raw, server: manifest.server, ok: true, manifest, plan, checkedAt: Date.now() };
+    const any = await sync.fetchAnyManifest(link);
+    entry.server = any.server;
+    const base = { raw: entry.raw, server: any.server, game: any.game, gameName: any.gameName, mode: any.mode, note: any.note, address: joinAddress(link, any), ok: true, checkedAt: Date.now() };
+    if (game === 'valheim') {
+      if (!Array.isArray(any.raw.mods)) throw new Error('That link is not a Valheim mod list.');
+      const manifest = sync.checkManifest(any.raw);
+      const dir = gameDir();
+      return { ...base, manifest, plan: dir ? sync.planSync(dir, manifest, link) : null };
+    }
+    if (game === 'java' && any.mode === 'sync') {
+      const manifest = mc.checkJavaManifest(any);
+      entry.folder ??= mc.folderName(any.server, link);
+      return {
+        ...base,
+        java: { loader: mc.loaderName(manifest.loader), mcVersion: manifest.mcVersion, loaderVersion: manifest.loaderVersion, mods: manifest.mods.length, folder: entry.folder },
+        plan: mc.planJava(entry.folder, manifest),
+        setup: mc.launcherStatus(entry.folder, manifest),
+        installed: mc.installedJava(entry.folder),
+      };
+    }
+    if (game === 'satisfactory') return { ...base, mods: checkSatisfactory(any) };
+    return base;
   } catch (err) {
-    return { raw: entry.raw, server: entry.server ?? null, ok: false, error: err.message, checkedAt: Date.now() };
+    return { raw: entry.raw, server: entry.server ?? null, game, ok: false, error: err.message, checkedAt: Date.now() };
   }
 }
 
@@ -217,7 +254,7 @@ async function state() {
   const links = await Promise.all(settings.links.map(linkStatus));
   captureActive();
   saveSettings(settings);
-  const firstLink = settings.links[0] ? sync.parseLink(settings.links[0].raw) : null;
+  const firstLink = linksFor('valheim')[0] ? sync.parseLink(linksFor('valheim')[0].raw) : null;
   return {
     version: app.getVersion(),
     gameDir: dir,
@@ -245,24 +282,63 @@ function discardPending() {
   pending = [];
 }
 
-/** Downloads and checks every change for every followed server. Nothing is installed yet. */
-async function prepareAll() {
+/**
+ * Downloads and checks every change for the followed servers of one game ('valheim' or 'java'; null = every game
+ * that can be synced right now). Nothing is installed yet.
+ */
+async function prepareAll(game = 'valheim') {
   const dir = gameDir();
-  if (!dir) throw new Error("Valheim wasn't found. Choose its folder first.");
+  if (game === 'valheim' && !dir) throw new Error("Valheim wasn't found. Choose its folder first.");
   discardPending();
-  for (const entry of settings.links) {
-    const link = sync.parseLink(entry.raw);
-    log(`Checking ${entry.server ?? link.host}…`);
-    const manifest = await sync.fetchManifest(link);
-    pending.push(await sync.prepareSync(dir, manifest, link, path.join(os.tmpdir(), 'tavern-client-mods'), log));
+  const work = path.join(os.tmpdir(), 'tavern-client-mods');
+  if ((game === 'valheim' || game === null) && dir) {
+    for (const entry of linksFor('valheim')) {
+      const link = sync.parseLink(entry.raw);
+      log(`Checking ${entry.server ?? link.host}…`);
+      const manifest = await sync.fetchManifest(link);
+      pending.push(await sync.prepareSync(dir, manifest, link, work, log));
+    }
+  }
+  if (game === 'java' || game === null) {
+    for (const entry of linksFor('java')) {
+      const link = sync.parseLink(entry.raw);
+      log(`Checking ${entry.server ?? link.host}…`);
+      const any = await sync.fetchAnyManifest(link);
+      if (any.mode !== 'sync') continue; // a server without mods: nothing to sync
+      const manifest = mc.checkJavaManifest(any);
+      entry.folder ??= mc.folderName(any.server, link);
+      pending.push(await mc.prepareJava(entry.folder, manifest, link, joinAddress(link, any), work, log));
+    }
+    saveSettings(settings);
   }
   return pending;
 }
 
+const canAuto = (p, approved) => (p.kind === 'java' ? mc.canAutoApplyJava(p, approved) : sync.canAutoApply(p, approved));
+
 /** What the review screen shows. */
 function reviewOf(list) {
   const approved = approvedSet();
-  return list.map((p) => ({
+  return list.map((p) => p.kind === 'java' ? {
+    server: p.manifest.server,
+    bepinex: null,
+    changes: p.changes.map((c) => ({
+      key: c.key,
+      name: c.mod.name,
+      author: '',
+      version: c.mod.version,
+      from: c.from,
+      action: c.action,
+      source: c.modrinth ? 'modrinth' : 'server',
+      scan: c.scan,
+      needsApproval: c.needsApproval,
+      blocked: c.blocked,
+      approvedBefore: approved.has(c.key),
+    })),
+    removals: p.removals,
+    unavailable: p.unavailable,
+    same: p.same,
+  } : {
     server: p.manifest.server,
     bepinex: p.bepinex ? { version: p.bepinex.version, scan: p.bepinex.scan } : null,
     changes: p.changes.map((c) => ({
@@ -281,7 +357,7 @@ function reviewOf(list) {
     removals: p.removals.map((m) => m.name.replace(/_/g, ' ')),
     unavailable: p.unavailable ?? [],
     same: p.same,
-  }));
+  });
 }
 
 const hasChanges = (list) => list.some((p) => p.bepinex || p.changes.length || p.removals.length || p.unavailable?.length);
@@ -289,13 +365,19 @@ const hasChanges = (list) => list.some((p) => p.bepinex || p.changes.length || p
 /** Installs the pending changes: clean ones, remembered approvals and the ones approved now. */
 async function applyPending(approveNow = []) {
   const dir = gameDir();
-  if (valheimRunning()) throw new Error('Close Valheim first: its mod files are locked while it runs.');
+  if (pending.some((p) => p.kind !== 'java') && valheimRunning()) throw new Error('Close Valheim first: its mod files are locked while it runs.');
   settings.approved = [...new Set([...(settings.approved ?? []), ...approveNow])];
   saveSettings(settings);
   const approved = approvedSet();
   const summary = [];
   try {
     for (const p of pending) {
+      if (p.kind === 'java') {
+        const r = await mc.applyJava(p, approved, log);
+        summary.push(`${p.manifest.server}: ${r.installed.length} installed, ${r.removed.length} removed${r.skipped.length ? `, skipped ${r.skipped.join(', ')}` : ''}`);
+        if (r.setup && !r.setup.loaderReady) summary.push(`${p.manifest.server}: ${mc.loaderName(p.manifest.loader)} isn't in the Minecraft Launcher yet: run its installer once (see the Minecraft tab).`);
+        continue;
+      }
       const r = await sync.applyPrepared(dir, p, approved, log);
       summary.push(
         `${p.manifest.server}: ${r.installed.length} installed, ${r.removed.length} removed${r.skipped.length ? `, skipped ${r.skipped.join(', ')}` : ''}`,
@@ -308,7 +390,7 @@ async function applyPending(approveNow = []) {
     captureActive();
     saveSettings(settings);
   }
-  summary.forEach(log);
+  // The page logs the summary (after a review, or when it hears about an automatic sync).
   return summary;
 }
 
@@ -326,20 +408,47 @@ const handle = (name, fn) =>
 handle('state', state);
 handle('add-link', async (raw) => {
   const link = sync.parseLink(String(raw));
-  const manifest = await sync.fetchManifest(link); // proves the link works before saving it
+  const any = await sync.fetchAnyManifest(link); // proves the link works before saving it
   settings.links = settings.links.filter((l) => sync.parseLink(l.raw).token !== link.token);
-  settings.links.push({ raw: link.raw, server: manifest.server });
+  settings.links.push({ raw: link.raw, server: any.server, game: any.game, ...(any.game === 'java' ? { folder: mc.folderName(any.server, link) } : {}) });
   saveSettings(settings);
-  return manifest.server;
+  return { server: any.server, game: any.game, gameName: any.gameName };
 });
 handle('remove-link', async (raw) => {
   settings.links = settings.links.filter((l) => l.raw !== raw);
   saveSettings(settings);
 });
 // Sync now: download + check, then the page shows the review (or reports nothing to do).
-handle('prepare', async () => {
-  const list = await prepareAll();
-  return { review: reviewOf(list), changes: hasChanges(list), auto: list.every((p) => sync.canAutoApply(p, approvedSet())) };
+handle('prepare', async (game) => {
+  const list = await prepareAll(game === 'java' ? 'java' : 'valheim');
+  return { review: reviewOf(list), changes: hasChanges(list), auto: list.every((p) => canAuto(p, approvedSet())) };
+});
+// Minecraft: set the launcher up again (after running the Forge/NeoForge installer, or if the profile was deleted).
+handle('mc-setup', async (raw) => {
+  const entry = linksFor('java').find((l) => l.raw === raw);
+  if (!entry) throw new Error('That server is no longer followed.');
+  const link = sync.parseLink(entry.raw);
+  const any = await sync.fetchAnyManifest(link);
+  const manifest = mc.checkJavaManifest(any);
+  entry.folder ??= mc.folderName(any.server, link);
+  saveSettings(settings);
+  return mc.setupLauncher(entry.folder, manifest, joinAddress(link, any), log);
+});
+handle('mc-open-folder', async (raw) => {
+  const entry = linksFor('java').find((l) => l.raw === raw);
+  if (!entry?.folder) return;
+  const dir = path.join(mc.instanceDir(entry.folder), 'mods');
+  mkdirSync(dir, { recursive: true });
+  await shell.openPath(dir);
+});
+// Links the page may open outside the app: mod pages, loader installers and Satisfactory Mod Manager.
+handle('open-external', async (url) => {
+  const u = String(url);
+  const ok =
+    /^smmanager:\/\/install\?modID=[A-Za-z0-9_]{1,64}(&version=[\w.\-+]{1,40})?$/.test(u) ||
+    /^https:\/\/(ficsit\.app|smm\.ficsit\.app|maven\.minecraftforge\.net|maven\.neoforged\.net|www\.minecraft\.net)\//.test(u);
+  if (!ok) throw new Error('That link is not allowed.');
+  await shell.openExternal(u);
 });
 handle('apply', async (approveNow) => applyPending(Array.isArray(approveNow) ? approveNow.map(String) : []));
 handle('cancel', async () => discardPending());
@@ -826,16 +935,23 @@ function openBrowser(url, site) {
 // every one is a Thunderstore mod that passed all the safety checks (or was approved before); otherwise the player is
 // asked to review them.
 setInterval(async () => {
-  // Nothing changes behind the player's back while they're playing vanilla.
-  if (!settings.links.length || !gameDir() || pending.length || activeProfile() === VANILLA) return;
+  if (!settings.links.length || pending.length) return;
   try {
     const st = await state();
-    const changes = st.links.some((l) => l.ok && l.plan && l.plan.add.length + l.plan.update.length + l.plan.remove.length + (l.plan.needsBepInEx ? 1 : 0) > 0);
-    if (!changes) return;
-    if (!settings.autoSync || valheimRunning()) return send('state-changed');
-    const list = await prepareAll();
-    if (list.every((p) => sync.canAutoApply(p, approvedSet()))) send('auto-synced', await applyPending());
-    else send('needs-review', { review: reviewOf(list) });
+    const changed = (l) => l.ok && l.plan && l.plan.add.length + l.plan.update.length + l.plan.remove.length + (l.plan.needsBepInEx ? 1 : 0) > 0;
+    // Valheim: nothing changes behind the player's back while they're playing vanilla, or while the game runs.
+    const valheim = gameDir() && activeProfile() !== VANILLA && !valheimRunning() && st.links.some((l) => l.game === 'valheim' && changed(l));
+    const java = st.links.some((l) => l.game === 'java' && changed(l));
+    if (!valheim && !java) return;
+    if (!settings.autoSync) return send('state-changed');
+    for (const game of [valheim && 'valheim', java && 'java'].filter(Boolean)) {
+      const list = await prepareAll(game);
+      if (list.every((p) => canAuto(p, approvedSet()))) send('auto-synced', await applyPending());
+      else {
+        send('needs-review', { review: reviewOf(list), game });
+        break; // one review at a time
+      }
+    }
     send('state-changed');
   } catch {}
 }, 10 * 60_000);
