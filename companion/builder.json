@@ -5,10 +5,10 @@
   "extraMetadata": {
     "name": "tavern-client-mod-manager",
     "productName": "Tavern Client Mod Manager",
-    "version": "0.5.1",
+    "version": "0.5.2",
     "main": "companion/main.js"
   },
-  "files": ["companion/**", "dist/valheim-mods.js", "dist/zip.js", "dist/modscan.js", "dist/nexus.js", "dist/modsync/**", "package.json"],
+  "files": ["companion/**", "dist/valheim-mods.js", "dist/zip.js", "dist/modscan.js", "dist/nexus.js", "dist/bepinex-config.js", "dist/modsync/**", "package.json"],
   "asar": false,
   "win": { "target": "nsis", "icon": "companion/icon.ico" },
   "nsis": {

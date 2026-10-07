@@ -1,6 +1,6 @@
 # Tavern Host HTTP API
 
-Reference for Tavern Host 0.6.0. This file is generated from the list in `public/app.js` (the same one the panel shows in Settings → API reference) by `node tools/make-api-docs.mjs`.
+Reference for Tavern Host 0.6.1. This file is generated from the list in `public/app.js` (the same one the panel shows in Settings → API reference) by `node tools/make-api-docs.mjs`.
 
 > Tavern Host is in beta and updates are frequent. Routes can change between versions; check this file for the version you run.
 
@@ -186,6 +186,9 @@ curl -X POST -H "Authorization: Bearer th_…" -H "Content-Type: application/jso
 | `PUT /api/servers/{id}/addons/update-settings` | Change them: {"channel":"beta","auto":true} (beta/alpha files only count when newer than the newest release) | Manage mods / plugins / addons |
 | `POST /api/servers/{id}/addons/setup` | Turn on modding (Valheim: installs BepInEx; permanent) | Manage mods / plugins / addons |
 | `POST /api/servers/{id}/addons/{item}/side` | Who gets a mod (Valheim: {"side":"both\|server\|clients"}; Minecraft Java mod servers: {"side":"both\|server"}). server = not shared with players | Manage mods / plugins / addons |
+| `GET /api/servers/{id}/addons/settings` | Valheim: mod settings files in BepInEx/config: {files:[{file, plugin, version, mod, settings, shared}]} (mod = the installed mod it belongs to, if known) | Manage mods / plugins / addons |
+| `GET /api/servers/{id}/addons/settings/{file}` | Valheim: one settings file: {entries:[{section, key, value, description, type, default, options, multi, range, shared}]} | Manage mods / plugins / addons |
+| `PUT /api/servers/{id}/addons/settings/{file}` | Valheim: change values and choose what players get: {"values":[{"section","key","value"}],"shared":[{"section","key"}]} (shared = the full list sent to players through the share link) | Manage mods / plugins / addons |
 | `PUT /api/servers/{id}/addons/location` | Where new addons go (games with more than one addon folder): {"location"} | Manage mods / plugins / addons |
 | `POST /api/servers/{id}/addons/{item}/move` | Move one addon to the other folder: {"to"} | Manage mods / plugins / addons |
 | `POST /api/servers/{id}/addons/move-all` | Move every addon to one folder: {"to"} | Manage mods / plugins / addons |

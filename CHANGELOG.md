@@ -1,5 +1,10 @@
 # Changelog
 
+## Tavern Client Mod Manager 0.5.2
+
+**Fixed**
+- 0.5.1 wouldn't open: it stopped with "A JavaScript error occurred in the main process" (Cannot find module … bepinex-config.js) because a file was left out of the installer. If you have 0.5.1, download and run this installer; the app can't update itself while it won't start.
+
 ## Tavern Host 0.6.1
 
 **New**
