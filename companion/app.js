@@ -225,7 +225,7 @@ function render() {
 
 // ---------- games ----------
 
-const OTHER_GAMES = ['bedrock', 'terraria', 'spaceengineers'];
+const OTHER_GAMES = ['bedrock', 'terraria', 'spaceengineers', 'factorio', 'palworld', 'enshrouded', 'sevendays', 'zomboid', 'vrising'];
 const tabOf = (game) => (OTHER_GAMES.includes(game) ? 'other' : game);
 let currentTab = (() => {
   try {

@@ -535,6 +535,8 @@ dialog.perm-dialog { width: min(1000px, calc(100vw - 32px)); max-width: none; }
 .side-select { width: auto; font-size: 12.5px; padding: 4px 8px; }
 .type-badge.dep { color: var(--muted); }
 .type-badge.manual { color: var(--gold); }
+.discord-events { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px; margin: 10px 0; }
+.discord-events .toggle { margin: 0; }
 /* Mod settings (Valheim BepInEx config files) */
 .settings-files { margin-top: 14px; }
 .settings-files h4 { margin: 0 0 4px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
@@ -611,6 +613,7 @@ dialog.perm-dialog { width: min(1000px, calc(100vw - 32px)); max-width: none; }
 /* Server type icons */
 .srv-icon { display: inline-block; flex: none; position: relative; line-height: 0; }
 .srv-icon svg { width: 100%; height: 100%; display: block; }
+.srv-icon img { width: 100%; height: 100%; display: block; object-fit: contain; border-radius: 22%; }
 .srv-icon.side { width: 30px; height: 30px; align-self: flex-start; margin-top: 2px; }
 .srv-icon.side .dot { position: absolute; right: -3px; bottom: -3px; width: 11px; height: 11px; border: 2px solid var(--panel); }
 .srv-icon.big { width: 46px; height: 46px; }

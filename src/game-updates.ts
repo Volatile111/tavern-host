@@ -17,6 +17,8 @@ import { latestVanillaVersion, installedVanillaVersion } from './games/terraria-
 import { SATISFACTORY_APP } from './games/satisfactory.ts';
 import { SPACE_ENGINEERS_APP } from './games/spaceengineers.ts';
 import { readProperties } from './properties.ts';
+import { latestFactorio, installedFactorio } from './games/factorio.ts';
+import { STEAM_APPS } from './games/steam-games.ts';
 
 type Instance = ReturnType<typeof getInstance>;
 
@@ -67,6 +69,32 @@ const VALHEIM_APP = 896660;
 // Tavern Host's own note of the Steam build it installed (SteamCMD doesn't always leave its app manifest in the folder).
 const buildNote = (inst: Instance) => path.join(inst.record.installDir, '.tavernhost-steam.json');
 
+/** A dedicated server installed with SteamCMD: the public branch's build, compared with the installed one. */
+function steamSource(name: string, appId: number): Source {
+  return {
+    name,
+    latest: async () => {
+      const b = await latestBuild(appId);
+      return { version: b.build, updated: b.updated };
+    },
+    current: (inst) => {
+      const fromSteam = installedBuild(appId, inst.record.installDir);
+      if (fromSteam) return fromSteam;
+      try {
+        return String(JSON.parse(readFileSync(buildNote(inst), 'utf-8')).build ?? '') || null;
+      } catch {
+        return null;
+      }
+    },
+    newer: (a, b) => Number(a) > Number(b),
+    installed: (inst, build) => {
+      try {
+        writeFileSync(buildNote(inst), JSON.stringify({ appId, build, at: Date.now() }, null, 2));
+      } catch {}
+    },
+  };
+}
+
 const SOURCES: Record<string, Source> = {
   bedrock: {
     name: 'Bedrock',
@@ -102,57 +130,26 @@ const SOURCES: Record<string, Source> = {
       } catch {}
     },
   },
-  // Satisfactory's dedicated server on Steam (public branch build), like Valheim.
-  satisfactory: {
-    name: 'Satisfactory',
-    latest: async () => {
-      const b = await latestBuild(SATISFACTORY_APP);
-      return { version: b.build, updated: b.updated };
-    },
-    current: (inst) => {
-      const fromSteam = installedBuild(SATISFACTORY_APP, inst.record.installDir);
-      if (fromSteam) return fromSteam;
-      try {
-        return String(JSON.parse(readFileSync(buildNote(inst), 'utf-8')).build ?? '') || null;
-      } catch {
-        return null;
-      }
-    },
-    newer: (a, b) => Number(a) > Number(b),
-    installed: (inst, build) => {
-      try {
-        writeFileSync(buildNote(inst), JSON.stringify({ appId: SATISFACTORY_APP, build, at: Date.now() }, null, 2));
-      } catch {}
-    },
-  },
-  // Space Engineers' dedicated server on Steam (public branch build).
-  spaceengineers: {
-    name: 'Space Engineers',
-    latest: async () => {
-      const b = await latestBuild(SPACE_ENGINEERS_APP);
-      return { version: b.build, updated: b.updated };
-    },
-    current: (inst) => {
-      const fromSteam = installedBuild(SPACE_ENGINEERS_APP, inst.record.installDir);
-      if (fromSteam) return fromSteam;
-      try {
-        return String(JSON.parse(readFileSync(buildNote(inst), 'utf-8')).build ?? '') || null;
-      } catch {
-        return null;
-      }
-    },
-    newer: (a, b) => Number(a) > Number(b),
-    installed: (inst, build) => {
-      try {
-        writeFileSync(buildNote(inst), JSON.stringify({ appId: SPACE_ENGINEERS_APP, build, at: Date.now() }, null, 2));
-      } catch {}
-    },
-  },
+  // Dedicated servers on Steam (public branch build), like Valheim.
+  satisfactory: steamSource('Satisfactory', SATISFACTORY_APP),
+  spaceengineers: steamSource('Space Engineers', SPACE_ENGINEERS_APP),
+  palworld: steamSource('Palworld', STEAM_APPS.palworld),
+  enshrouded: steamSource('Enshrouded', STEAM_APPS.enshrouded),
+  sevendays: steamSource('7 Days to Die', STEAM_APPS.sevendays),
+  zomboid: steamSource('Project Zomboid', STEAM_APPS.zomboid),
+  vrising: steamSource('V Rising', STEAM_APPS.vrising),
   // The official Terraria dedicated server (terraria.org).
   'terraria-vanilla': {
     name: 'Terraria',
     latest: async () => ({ version: await latestVanillaVersion(), updated: null }),
     current: (inst) => installedVanillaVersion(inst.record.installDir),
+    newer: newerDotted,
+  },
+  // Factorio from factorio.com (stable or experimental, per server; the public latest-releases list).
+  factorio: {
+    name: 'Factorio',
+    latest: async () => ({ version: await latestFactorio('stable', 'alpha'), updated: null }),
+    current: (inst) => installedFactorio(inst.record.installDir)?.version ?? null,
     newer: newerDotted,
   },
   // tModLoader releases on GitHub (Terraria itself comes inside them).

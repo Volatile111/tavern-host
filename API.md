@@ -1,6 +1,6 @@
 # Tavern Host HTTP API
 
-Reference for Tavern Host 0.6.1. This file is generated from the list in `public/app.js` (the same one the panel shows in Settings → API reference) by `node tools/make-api-docs.mjs`.
+Reference for Tavern Host 0.7.0. This file is generated from the list in `public/app.js` (the same one the panel shows in Settings → API reference) by `node tools/make-api-docs.mjs`.
 
 > Tavern Host is in beta and updates are frequent. Routes can change between versions; check this file for the version you run.
 
@@ -245,6 +245,11 @@ curl -X POST -H "Authorization: Bearer th_…" -H "Content-Type: application/jso
 | `POST /api/settings/remote/firewall` | Add the Windows Firewall rule for the Remote access port (on this system only; Windows asks for admin) | Panel settings |
 | `GET /api/settings/integrations` | Which integrations are set up: {curseforge, nexus} (never the keys) | Panel settings |
 | `PUT /api/settings/integrations` | Set or remove keys: {"curseforgeKey"?,"nexusKey"?} ("" removes; the Nexus key is checked with Nexus) | Panel settings |
+| `GET /api/servers/{id}/discord` | Discord notifications: {url, events:{started, stopped, crashed, join, leave, updateAvailable, updated, backupFailed}, labels} | Change settings |
+| `PUT /api/servers/{id}/discord` | Set them: {"url":"https://discord.com/api/webhooks/…","events":{"join":true,…}} (url "" turns them off) | Change settings |
+| `POST /api/servers/{id}/discord/test` | Post a test message: {"url"?} (else the saved webhook) | Change settings |
+| `PUT /api/settings/integrations/factorio` | factorio.com login for Factorio servers and mods: {"username","token"} (checked with factorio.com; both "" removes). Answers {linked, username, spaceAge, canImport} | Panel settings |
+| `POST /api/settings/integrations/factorio/import` | Take the factorio.com login the Factorio game saved on this system (player-data.json) | Panel settings |
 | `GET /api/settings/backup-copy` | Backup copies to another drive or share: {enabled, folder, keepDays} | Panel settings |
 | `PUT /api/settings/backup-copy` | Change them: {"enabled","folder","keepDays"} | Panel settings |
 | `POST /api/settings/backup-copy/test` | Test a folder: {"folder"} → free space | Panel settings |

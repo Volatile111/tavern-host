@@ -1,5 +1,25 @@
 # Changelog
 
+## Tavern Host 0.7.0
+
+**New**
+- **Factorio servers.** Factorio's Windows server is the full game, so it's downloaded with your own factorio.com login: add it in Settings → Integrations (paste your username and token from factorio.com/profile, or **Import from this PC** if you play Factorio here). Create a new map (map preset and seed) or use an existing save, with the server settings, admin, allow and ban lists (changed in-game while the server runs, because Factorio rewrites them when it stops), Space Age on or off if your account owns it, and mods from the mod portal on the Mods tab (by name or link, with their required mods, update checks and thumbnails). Stop saves first. Factorio support is new and less tested than the other games, so please report anything that doesn't work.
+- **Palworld servers.** Installed and updated with SteamCMD. The main settings are written into the game's settings line and the rest is kept; the overview shows live details through Palworld's REST API, and stop saves, then shuts down.
+- **Enshrouded servers.** Installed and updated with SteamCMD, with the server name, max players, difficulty presets (or custom), text and voice chat, and the Admin, Friend, Guest and Visitor passwords. The rest of enshrouded_server.json is kept.
+- **V Rising servers.** Installed and updated with SteamCMD, with game and difficulty presets. Saves stay in the server folder. Countdown warnings go out as in-game announcements (over RCON, only reachable from this system), and stop saves the world.
+- **Project Zomboid servers.** Installed and updated with SteamCMD, with memory and admin password settings. Its files stay in the server folder, and stop saves first.
+- **7 Days to Die servers.** Installed and updated with SteamCMD, with the map (Navezgane, pregenerated or random), listing and player-killing settings. Saves stay in the server folder, the Console tab talks to the server's own console (only reachable from this system), and stop saves the world, then shuts down.
+- **Discord notifications.** Each server's Settings tab has a **Discord notifications** card: paste a channel webhook and choose the events (started, stopped, crashed, players joining and leaving, update available, updated, backup failed), and use **Send test message** to check it. Joins and leaves close together are sent as one message. New in this version, so please report anything that doesn't arrive.
+- **Mod settings for Minecraft Java.** Modded and plugin servers get the same **Settings** editor as Valheim on the Mods/Plugins tab, for config files in TOML, YAML, JSON and .properties (config, defaultconfigs, the world's serverconfig and each plugin's folder). Saving changes only those lines; lists and multi-line values are shown but read-only. Mods with several files open a picker.
+- **The games' own icons** in the server list and the New Server dialog for Factorio, Satisfactory, Space Engineers, Terraria and the new games.
+- **Share links for the new games**, with how to join each one. Players need Tavern Client Mod Manager 0.5.3 to add them.
+- The Mods tab's "add by ID or link" box says what each game takes, and games that also accept mod files keep the drop zone.
+
+## Tavern Client Mod Manager 0.5.3
+
+**New**
+- Server links for Factorio, Palworld, Enshrouded, V Rising, Project Zomboid and 7 Days to Die servers (from Tavern Host 0.7.0) show on the **Other servers** tab with how to join.
+
 ## Tavern Client Mod Manager 0.5.2
 
 **Fixed**

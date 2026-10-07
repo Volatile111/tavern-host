@@ -124,6 +124,8 @@ export interface AddonSupport {
   readOnly?: boolean;
   /** Adds an item by ID or link instead of a file (Space Engineers: Steam Workshop). Shows an input box on the Mods tab. */
   addById?(record: ServerRecord, input: string): Promise<{ installed: unknown[]; warnings: string[] }>;
+  /** Placeholder for that input box (default: a Steam Workshop link). */
+  addByIdPlaceholder?: string;
   /** `install` also accepts a folder (Bedrock: unpacked behavior/resource packs can be dropped as folders). */
   folders?: boolean;
   /** Changes need the server stopped (Valheim: loaded mod DLLs are locked while it runs). */
@@ -212,7 +214,22 @@ export interface GameModule {
    * Games that read typed commands (Minecraft). The server then runs under the runner (runner.ts), commands can be
    * sent from the Console tab, and Stop sends `stop` so the world saves.
    */
-  commands?: { stop: string | ((record: ServerRecord) => string) };
+  commands?: {
+    stop: string | ((record: ServerRecord) => string);
+    /** Sent before the stop command, waiting (up to timeoutMs) for a log line matching `done` (Factorio: /server-save). */
+    saveFirst?: { command: string; done: RegExp; timeoutMs: number };
+  };
+  /** Console commands keep a leading "/" (Factorio: commands start with "/", anything else is chat). */
+  slashCommands?: boolean;
+  /** Runs under the runner only to capture its console output into the log (no typed commands; Palworld). */
+  captureOutput?: boolean;
+  /** The console command that messages everyone (countdown warnings), for games with typed commands. Default: "say <text>". */
+  announceCommand?(text: string): string;
+  /**
+   * Console commands for the Players tab's actions (kick, ban, pardon, op, deop, whitelist-add, whitelist-remove).
+   * Only the actions listed are offered. `reason` may be empty.
+   */
+  playerCommands?: Partial<Record<'kick' | 'ban' | 'pardon' | 'op' | 'deop' | 'whitelist-add' | 'whitelist-remove', (name: string, reason: string) => string>>;
   /**
    * Games that only read commands typed into a real console window (Terraria / tModLoader ignore piped input). The
    * server runs in its own hidden console and Tavern Host types commands into it; Stop types `stop`.

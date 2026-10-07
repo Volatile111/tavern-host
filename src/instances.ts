@@ -18,6 +18,12 @@ import { terraria } from './games/terraria.ts';
 import { terrariaVanilla } from './games/terraria-vanilla.ts';
 import { satisfactory } from './games/satisfactory.ts';
 import { spaceEngineers } from './games/spaceengineers.ts';
+import { factorio } from './games/factorio.ts';
+import { palworld } from './games/palworld.ts';
+import { enshrouded } from './games/enshrouded.ts';
+import { vrising } from './games/vrising.ts';
+import { zomboid } from './games/zomboid.ts';
+import { sevenDays } from './games/sevendays.ts';
 import { setStatsSource, forgetStats } from './stats.ts';
 import { parseChatLine, recordChat } from './chat.ts';
 import { syncPlayers, forgetPlayers, mutedPlayers } from './players.ts';
@@ -25,7 +31,7 @@ import { createBackup, restoreBackup, pruneScheduled, listBackups, backupsFolder
 import { assertModifiable, recycle } from './files.ts';
 
 // "terraria" is Terraria with tModLoader (its id from before vanilla existed); "terraria-vanilla" is the official server.
-export const GAMES: Record<string, GameModule> = { bedrock, java, valheim, 'terraria-vanilla': terrariaVanilla, terraria, satisfactory, spaceengineers: spaceEngineers };
+export const GAMES: Record<string, GameModule> = { bedrock, java, valheim, 'terraria-vanilla': terrariaVanilla, terraria, satisfactory, spaceengineers: spaceEngineers, factorio, palworld, enshrouded, vrising, zomboid, sevendays: sevenDays };
 
 // runner.ts in development, runner.js in the installed (compiled) app: same folder and extension as this file.
 const thisFile = fileURLToPath(import.meta.url);
@@ -411,8 +417,9 @@ class ServerInstance {
       this.note(`Starting ${this.module.name} server...`);
       if (this.module.prepare) await this.module.prepare(this.record, (msg) => this.note(msg));
       const launch = this.module.launch(this.record, this.logFile);
-      if (this.module.commands) {
-        // Games that read typed commands run under the runner, which owns their console (see runner.ts).
+      if (this.module.commands || this.module.captureOutput) {
+        // Games that read typed commands run under the runner, which owns their console (see runner.ts); so do games
+        // whose output only goes to their console (captureOutput: the runner writes it to the log).
         this.pipe = `\\\\.\\pipe\\tavernhost-${this.id}-${randomBytes(6).toString('hex')}`;
         this.token = randomBytes(24).toString('hex');
         const spec = { ...launch, logFile: this.logFile, pipe: this.pipe, token: this.token };
@@ -456,6 +463,17 @@ class ServerInstance {
       this.setStatus('stopping');
       let sent = false;
       if (this.module.commands && this.pipe && this.token) {
+        // Games that need to be told to save first (Factorio: /server-save, then /quit).
+        const saveFirst = this.module.commands.saveFirst;
+        if (saveFirst) {
+          this.note(`Stopping: saving first ("${saveFirst.command}")...`);
+          const saved = this.waitForLine(saveFirst.done, saveFirst.timeoutMs).then(
+            () => true,
+            () => false,
+          );
+          await sendPipeCommand(this.pipe, this.token, saveFirst.command).catch(() => {});
+          if (!(await saved)) this.note("The save didn't confirm in time; stopping anyway.");
+        }
         const stopCmd = typeof this.module.commands.stop === 'function' ? this.module.commands.stop(this.record) : this.module.commands.stop;
         this.note(`Stopping: sending "${stopCmd}" so the server saves and shuts down...`);
         sent = await sendPipeCommand(this.pipe, this.token, stopCmd).then(
@@ -534,7 +552,9 @@ class ServerInstance {
         ? `tellraw @a ${JSON.stringify({ rawtext: [{ text: `§6[Server]§r ${text}` }] })}`
         : this.record.game === 'java'
           ? `tellraw @a ${JSON.stringify({ text: `[Server] ${text}`, color: 'gold' })}`
-          : `say ${text}`;
+          : this.module.announceCommand
+            ? this.module.announceCommand(text)
+            : `say ${text}`;
     await this.sendCommand(cmd).catch(() => {});
   }
 
@@ -615,7 +635,8 @@ class ServerInstance {
   /** Sends a typed command to the server's console (games with `commands` only). */
   async sendCommand(command: string) {
     if (!this.takesCommands) throw new Error(`${this.module.name} servers don't accept console commands.`);
-    const clean = String(command ?? '').replace(/[\r\n]+/g, ' ').trim().replace(/^\//, '');
+    const oneLine = String(command ?? '').replace(/[\r\n]+/g, ' ').trim();
+    const clean = this.module.slashCommands ? oneLine : oneLine.replace(/^\//, '');
     if (!clean) throw new Error('Type a command first.');
     if (clean.length > 1000) throw new Error('That command is too long.');
     if (this.module.runCommand) {
@@ -641,7 +662,7 @@ class ServerInstance {
     const name = await processName(pid);
     // Runner-based servers are tracked by the runner's process: "Tavern Host Runner.exe" (installed app), or this same
     // executable (development, and servers started by versions before the separate runner).
-    const expected = this.module.commands ? [path.basename(process.execPath), RUNNER_EXE] : [this.module.processName];
+    const expected = this.module.commands || this.module.captureOutput ? [path.basename(process.execPath), RUNNER_EXE] : [this.module.processName];
     if (!expected.some((e) => e.toLowerCase() === name?.toLowerCase())) return;
     if (this.module.commands && (!pipe || !token)) return;
     this.pid = pid;

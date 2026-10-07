@@ -2,14 +2,16 @@
 
 > **Beta:** Tavern Host and Tavern Client Mod Manager are both in beta. They're actively being worked on and updates are frequent, so expect changes and the odd rough edge. Please report problems on the [Issues](https://github.com/Volatile111/tavern-host/issues) page (or **Help → Report a problem** in either app).
 
-Tavern Host is a Windows app for running your own game servers from one panel. It supports Minecraft Bedrock, Minecraft Java (including BungeeCord networks), Valheim, Terraria (vanilla and tModLoader), Satisfactory and Space Engineers.
+Tavern Host is a Windows app for running your own game servers from one panel. It supports Minecraft Bedrock, Minecraft Java (including BungeeCord networks), Valheim, Terraria (vanilla and tModLoader), Satisfactory, Space Engineers, Factorio, Palworld, Enshrouded, V Rising, Project Zomboid and 7 Days to Die.
 
 - Start, stop and restart servers, with a live console, player list and countdowns that warn players first.
 - Run servers on other systems too (nodes), managed from one main panel.
 - Automatic backups, plus a world integrity check that warns you before a damaged world gets backed up over a good one.
 - Automatic game updates, and Tavern Host updates itself too.
-- Mods and addons: Valheim mods from Thunderstore, Hexium and Nexus Mods, Minecraft addons, mods and plugins (CurseForge, Modrinth and others), tModLoader mods, Steam Workshop mods for Space Engineers, and Satisfactory mods through Satisfactory Mod Manager.
+- Mods and addons: Valheim mods from Thunderstore, Hexium and Nexus Mods, Minecraft addons, mods and plugins (CurseForge, Modrinth and others), tModLoader mods, Steam Workshop mods for Space Engineers, Factorio mods from the mod portal, and Satisfactory mods through Satisfactory Mod Manager.
+- Mod settings: edit Valheim (BepInEx) and Minecraft Java mod and plugin config files from the Mods tab. Valheim settings can be sent to players.
 - Valheim: server profiles (world plus mods), difficulty presets and world modifiers, and admin, ban and allow-list controls.
+- Discord notifications for each server: started, stopped, crashed, players joining and leaving, updates and failed backups.
 - Port forwarding help for each server, and a warning when your public IP changes.
 - Users with their own permissions, an HTTP API, and optional Remote access so you can manage your servers from another device.
 
@@ -51,6 +53,8 @@ Tavern Host and the mod manager don't collect or send any usage data. They only 
 | Mojang (api.mojang.com), mc-heads.net | Looking up Minecraft Java player names for the player lists, and showing player head pictures |
 | Thunderstore, Hexium, Nexus Mods, CurseForge, Steam (Workshop details) | Browsing, downloading and checking mods, when you use them (Nexus and CurseForge only with your own API key) |
 | Modrinth, Fabric (meta.fabricmc.net) | Mod manager, Minecraft Java only: checking whether a server's mod file is the same as on Modrinth, and setting up Fabric in the Minecraft Launcher |
+| factorio.com, mods.factorio.com | Factorio only: checking your factorio.com login, downloading and updating the Factorio server, and browsing and downloading mods (with your own factorio.com login) |
+| Discord | Sending a server's notifications to the Discord webhook you set for it |
 | api.ipify.org | Looking up your public IP, for share links, port forwarding help and the "public IP changed" warning |
 
 Everything else (accounts, servers, settings, backups, logs) stays on your own system. Players' mod managers only connect to your Tavern Host through the share link you give them.
@@ -75,4 +79,4 @@ npm run release:client   # build the mod manager and publish it to tavern-client
 
 ## Licence
 
-GPL-3.0. See [LICENSE](LICENSE). Tavern Host is not affiliated with Mojang, Microsoft, Iron Gate, Coffee Stain, Valve, Thunderstore, Hexium, Nexus Mods or CurseForge.
+GPL-3.0. See [LICENSE](LICENSE). Tavern Host is not affiliated with Mojang, Microsoft, Iron Gate, Coffee Stain, Valve, Keen Software House, Re-Logic, Wube Software, Pocketpair, Keen Games, Stunlock Studios, The Indie Stone, The Fun Pimps, Discord, Thunderstore, Hexium, Nexus Mods or CurseForge.

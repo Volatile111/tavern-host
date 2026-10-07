@@ -1794,6 +1794,7 @@ function renderSettings() {
   }
   for (const input of $('settingsForm').querySelectorAll('input')) input.disabled = !hasPerm('settings.edit');
   loadDifficulty();
+  loadDiscord();
   $('profilesCard').hidden = d.game !== 'valheim';
   if (d.game === 'valheim') loadProfiles();
   $('updateCard').hidden = !d.canInstall;
@@ -1925,6 +1926,63 @@ $('pfSave').addEventListener('click', async () => {
 
 // ---------- difficulty (every server type) ----------
 
+// ---------- Discord notifications (Settings tab) ----------
+
+async function loadDiscord() {
+  const id = state.selected;
+  $('discordCard').hidden = !hasPerm('settings.edit');
+  if (!hasPerm('settings.edit')) return;
+  let d;
+  try {
+    d = await api('GET', `/api/servers/${id}/discord`);
+  } catch {
+    // A node running an older Tavern Host doesn't have this.
+    $('discordCard').hidden = true;
+    return;
+  }
+  if (id !== state.selected) return;
+  $('discordUrl').value = d.url;
+  const box = $('discordEvents');
+  box.innerHTML = '';
+  for (const [key, label] of Object.entries(d.labels)) {
+    const lab = el('label', 'toggle small-text');
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.dataset.event = key;
+    cb.checked = !!d.events[key];
+    lab.append(cb, document.createTextNode(` ${label}`));
+    box.appendChild(lab);
+  }
+  $('discordStatus').textContent = d.url ? 'On: notifications go to that channel.' : 'Off. Paste a webhook address to turn it on.';
+}
+
+function discordBody() {
+  const events = {};
+  for (const cb of $('discordEvents').querySelectorAll('input[data-event]')) events[cb.dataset.event] = cb.checked;
+  return { url: $('discordUrl').value.trim(), events };
+}
+
+$('discordSave').addEventListener('click', async () => {
+  try {
+    const d = await api('PUT', `/api/servers/${state.selected}/discord`, discordBody());
+    toast(d.url ? 'Discord notifications saved' : 'Discord notifications turned off');
+    loadDiscord();
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+$('discordTest').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await api('POST', `/api/servers/${state.selected}/discord/test`, { url: $('discordUrl').value.trim() });
+    toast('Test message sent: check the Discord channel');
+  } catch (err) {
+    toast(err.message, true);
+  }
+  btn.disabled = false;
+});
+
 let difficulty = null;
 async function loadDifficulty() {
   const id = state.selected;
@@ -1986,6 +2044,27 @@ const UPDATE_GAMES = {
     autoHelp: "Automatic updates: when Steam has a new Space Engineers server build, players get a 5-minute countdown in chat, the world is backed up, Steam installs the update and the server starts again. Players' games must be on the same version (Steam updates them). Checked every 30 minutes.",
     forceHelp: 'Force update: asks Steam right now and re-runs the update with a full file check, even if this server already looks up to date.',
   },
+  factorio: {
+    source: 'factorio.com',
+    autoHelp: "Automatic updates: when factorio.com has a new stable version, players get a 5-minute countdown in chat, the game is saved and backed up, the new version is downloaded (with your factorio.com login) and the server starts again. Players' games must be on the same version (Steam updates them). Servers on Experimental versions are updated with Force update. Checked every 30 minutes.",
+    forceHelp: 'Force update: downloads the newest version for this server (Stable or Experimental, as set in Settings) right now, even if it already looks up to date. Also use it after switching Space Age on or off.',
+  },
+  ...Object.fromEntries(
+    [
+      ['palworld', 'Palworld', 'players get a 5-minute countdown in chat'],
+      ['enshrouded', 'Enshrouded', "Tavern Host waits until nobody is online (at most an hour; Enshrouded can't message players)"],
+      ['sevendays', '7 Days to Die', 'players get a 5-minute countdown in chat'],
+      ['zomboid', 'Project Zomboid', 'players get a 5-minute countdown in chat'],
+      ['vrising', 'V Rising', 'players get a 5-minute countdown in chat'],
+    ].map(([id, name, warn]) => [
+      id,
+      {
+        source: 'Steam',
+        autoHelp: `Automatic updates: when Steam has a new ${name} server build, ${warn}, the world is saved and backed up, Steam installs the update and the server starts again. Players' games must be on the same version (Steam updates them). Checked every 30 minutes.`,
+        forceHelp: 'Force update: asks Steam right now and re-runs the update with a full file check, even if this server already looks up to date.',
+      },
+    ]),
+  ),
   'terraria-vanilla': {
     source: 'terraria.org',
     autoHelp: "Automatic updates: when terraria.org has a new dedicated server, players get a 5-minute countdown in chat, the world is backed up, the new version is installed and the server starts again. Players' games must be on the same version (Steam updates them). Checked every 30 minutes.",
@@ -3308,6 +3387,12 @@ const GAME_BLURBS = {
   terraria: 'Terraria with tModLoader mods. Players need tModLoader (free on Steam); it downloads the server’s mods by itself.',
   satisfactory: 'Factory building co-op. Works with the in-game Server Manager; mods through Satisfactory Mod Manager.',
   spaceengineers: 'Build ships and stations in space. Steam Workshop mods download to players by themselves.',
+  factorio: 'Build and automate factories, with or without Space Age. Needs your factorio.com login (Settings → Integrations); mods from the mod portal.',
+  palworld: 'Catch Pals, build bases, survive together. Players, announcements and clean stops through its REST API.',
+  enshrouded: 'Survival and base building in a foggy world. Up to 16 players, with password-protected roles.',
+  sevendays: 'Zombie survival crafting: build by day, defend at night. Console through its telnet admin port.',
+  zomboid: 'Project Zomboid: survive the zombie apocalypse together. Console commands, admins and Steam Workshop mods in its settings.',
+  vrising: 'Vampire survival: build a castle, hunt, rise. PvE or PvP.',
 };
 function renderGamePicks() {
   const box = $('newGamePicks');
@@ -4767,6 +4852,11 @@ const API_DOCS = [
     ['POST', '/api/settings/remote/firewall', 'Add the Windows Firewall rule for the Remote access port (on this system only; Windows asks for admin)', 'Panel settings'],
     ['GET', '/api/settings/integrations', 'Which integrations are set up: {curseforge, nexus} (never the keys)', 'Panel settings'],
     ['PUT', '/api/settings/integrations', 'Set or remove keys: {"curseforgeKey"?,"nexusKey"?} ("" removes; the Nexus key is checked with Nexus)', 'Panel settings'],
+    ['GET', '/api/servers/{id}/discord', 'Discord notifications: {url, events:{started, stopped, crashed, join, leave, updateAvailable, updated, backupFailed}, labels}', 'Change settings'],
+    ['PUT', '/api/servers/{id}/discord', 'Set them: {"url":"https://discord.com/api/webhooks/…","events":{"join":true,…}} (url "" turns them off)', 'Change settings'],
+    ['POST', '/api/servers/{id}/discord/test', 'Post a test message: {"url"?} (else the saved webhook)', 'Change settings'],
+    ['PUT', '/api/settings/integrations/factorio','factorio.com login for Factorio servers and mods: {"username","token"} (checked with factorio.com; both "" removes). Answers {linked, username, spaceAge, canImport}', 'Panel settings'],
+    ['POST', '/api/settings/integrations/factorio/import', "Take the factorio.com login the Factorio game saved on this system (player-data.json)", 'Panel settings'],
     ['GET', '/api/settings/backup-copy', 'Backup copies to another drive or share: {enabled, folder, keepDays}', 'Panel settings'],
     ['PUT', '/api/settings/backup-copy', 'Change them: {"enabled","folder","keepDays"}', 'Panel settings'],
     ['POST', '/api/settings/backup-copy/test', 'Test a folder: {"folder"} → free space', 'Panel settings'],
@@ -5203,9 +5293,11 @@ async function loadAddons() {
   const L = addonState.labels;
   // Listed only (Satisfactory: mods are managed with Satisfactory Mod Manager): no upload box.
   $('addonAddTitle').textContent = addonState.readOnly ? L.tab : `Add ${L.plural}`;
-  // Games whose mods are added by ID (Space Engineers: Steam Workshop) get a box instead of the file drop.
-  $('addonDrop').hidden = !!addonState.readOnly || !!addonState.canAddById;
+  // Games whose mods are added by ID get a box: instead of the file drop (Space Engineers: Steam Workshop), or as well
+  // as it when files can be added too (Factorio: mod portal name/link, or a mod zip).
+  $('addonDrop').hidden = !!addonState.readOnly || (!!addonState.canAddById && !addonState.accept);
   $('addonByIdForm').hidden = !addonState.canAddById;
+  $('addonByIdInput').placeholder = addonState.byIdPlaceholder ?? 'Steam Workshop link or ID, e.g. https://steamcommunity.com/sharedfiles/filedetails/?id=123456789';
   $('addonAddHelp').innerHTML = L.dropHelp; // fixed text from Tavern Host itself
   // Bedrock also takes unpacked pack folders.
   $('addonDrop').querySelector('span').innerHTML = addonState.folders
@@ -5715,6 +5807,15 @@ async function openModSettings(file) {
 
 function msControl(e, onChange) {
   const cur = msState.edits.get(msId(e)) ?? e.value;
+  // Lists, multi-line values...: shown as they are (edit them in the Files tab).
+  if (e.editable === false) {
+    const ro = el('input');
+    ro.value = cur;
+    ro.readOnly = true;
+    ro.disabled = true;
+    ro.title = "Can't be changed here: edit the file in the Files tab.";
+    return ro;
+  }
   if (e.type === 'Boolean') {
     const lab = el('label', 'toggle');
     const cb = el('input');
@@ -5763,8 +5864,13 @@ function msStatus() {
 
 function renderModSettings() {
   const { data } = msState;
+  // Valheim settings can be sent to players; Minecraft ones can't. Some formats have settings that can't be edited here.
+  const canShare = data.canShare !== false;
+  $('msShareHelp').hidden = !canShare;
+  $('msOnlySharedRow').hidden = !canShare;
+  $('msReadOnlyHelp').hidden = !data.entries.some((e) => e.editable === false);
   $('msTitle').textContent = `${data.plugin ?? data.file} settings`;
-  $('msSub').textContent = [data.version ? `v${data.version}` : null, `BepInEx/config/${data.file}`].filter(Boolean).join(' · ');
+  $('msSub').textContent = [data.version ? `v${data.version}` : null, data.file.includes('/') ? data.file : `BepInEx/config/${data.file}`].filter(Boolean).join(' · ');
   const body = $('msBody');
   body.innerHTML = '';
   const q = $('msFilter').value.trim().toLowerCase();
@@ -5813,6 +5919,7 @@ function renderModSettings() {
       msStatus();
     });
     share.append(cb, document.createTextNode(' To players'));
+    share.hidden = !canShare;
     row.appendChild(share);
     mark();
     body.appendChild(row);
@@ -6051,12 +6158,16 @@ function addonRow(p, compact = false) {
       link.addEventListener('click', () => (p.curseforge ? unlinkCurseforge(p, packUrl) : linkCurseforge(p, packUrl)));
       actions.appendChild(link);
     }
-    // Its settings file (Valheim: BepInEx/config), once the server has run the mod and it wrote one.
-    const cfg = !compact && addonState.settingsFiles?.find((f) => f.mod === p.id);
-    if (cfg) {
-      const b = el('button', 'small ghost', cfg.shared ? `Settings · ${cfg.shared} to players` : 'Settings');
-      b.title = `Edit ${cfg.file}${cfg.shared ? ` (${cfg.shared} setting${cfg.shared === 1 ? '' : 's'} sent to players)` : ''}`;
-      b.addEventListener('click', () => openModSettings(cfg.file));
+    // Its settings files (Valheim: BepInEx/config; Minecraft: config/ or plugins/<name>/), once the mod has written them.
+    const cfgs = compact ? [] : (addonState.settingsFiles ?? []).filter((f) => f.mod === p.id);
+    if (cfgs.length) {
+      const shared = cfgs.reduce((n, f) => n + (f.shared || 0), 0);
+      const b = el('button', 'small ghost', shared ? `Settings · ${shared} to players` : cfgs.length > 1 ? `Settings (${cfgs.length})` : 'Settings');
+      b.title = cfgs.map((f) => f.file).join('\n');
+      b.addEventListener('click', async () => {
+        const f = cfgs.length === 1 ? cfgs[0] : await pick(`${p.name} settings`, 'Which settings file?', cfgs, (x) => ({ title: x.plugin ?? x.file, sub: x.file }));
+        if (f) openModSettings(f.file);
+      });
       actions.appendChild(b);
     }
     // Who needs it (Valheim): server + players / server only / players only.
@@ -6385,7 +6496,8 @@ $('cfForm').addEventListener('submit', async (e) => {
 async function loadIntegrations() {
   $('integrationsCard').hidden = false;
   $('cfIntegration').hidden = !CURSEFORGE_UI;
-  const { curseforge, nexus } = await api('GET', '/api/settings/integrations');
+  const { curseforge, nexus, factorio } = await api('GET', '/api/settings/integrations');
+  renderFactorioLogin(factorio);
   $('nexusKeyStatus').textContent = nexus ? `Linked to Nexus Mods as ${nexus.name}${nexus.premium ? ' (Premium: mod page addresses work too)' : ' (free account: use "Mod Manager Download" links or Manual download)'}.` : 'No key saved. Nexus Mods zips can still be installed by dropping them in the Mods tab.';
   $('nexusKey').value = '';
   $('cfKeyStatus').textContent = curseforge ? 'A CurseForge key is saved. CurseForge browsing is on.' : 'No key saved. CurseForge browsing is off.';
@@ -6411,6 +6523,36 @@ $('btnRemoveNexusKey').addEventListener('click', async () => {
     toast(err.message, true);
   }
 });
+// factorio.com login (Factorio servers and the mod portal): pasted, or imported from the game on this PC.
+function renderFactorioLogin(f) {
+  if (!f) return;
+  $('factorioStatus').textContent = f.linked
+    ? `Linked as ${f.username}${f.spaceAge ? ' (owns Space Age)' : ' (base game; this account doesn\'t own Space Age)'}.`
+    : `No login saved. Factorio servers can't be installed or updated until one is.${f.canImport ? ' Factorio is logged in on this PC: "Import from this PC" takes that login.' : ''}`;
+  $('btnImportFactorio').hidden = !f.canImport;
+  $('factorioUser').value = '';
+  $('factorioToken').value = '';
+}
+async function saveFactorio(method, url, body, btn) {
+  btn.disabled = true;
+  try {
+    const f = await api(method, url, body);
+    renderFactorioLogin(f);
+    toast(f.linked ? `Factorio linked as ${f.username}` : 'Factorio login removed');
+  } catch (err) {
+    toast(err.message, true);
+  }
+  btn.disabled = false;
+}
+$('btnSaveFactorio').addEventListener('click', (e) => {
+  const username = $('factorioUser').value.trim();
+  const token = $('factorioToken').value.trim();
+  if (!username || !token) return toast('Enter your factorio.com username and token', true);
+  saveFactorio('PUT', '/api/settings/integrations/factorio', { username, token }, e.currentTarget);
+});
+$('btnImportFactorio').addEventListener('click', (e) => saveFactorio('POST', '/api/settings/integrations/factorio/import', undefined, e.currentTarget));
+$('btnRemoveFactorio').addEventListener('click', (e) => saveFactorio('PUT', '/api/settings/integrations/factorio', { username: '', token: '' }, e.currentTarget));
+
 $('btnSaveCfKey').addEventListener('click', async () => {
   try {
     await api('PUT', '/api/settings/integrations', { curseforgeKey: $('cfKey').value });

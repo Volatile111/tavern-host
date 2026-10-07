@@ -8,6 +8,7 @@ import { ensureJava, javaExe } from '../java-runtime.ts';
 import { FLAVORS, listVersions, installFlavor, javaForMinecraft, writeEula, type LaunchSpec } from './java-sources.ts';
 import { diagnoseJava } from './java-diagnose.ts';
 import { contentKind, contentLinks, listContent, installContent, removeContent, setContentEnabled, contentIcon, setContentSide, MOD_SIDES } from './java-content.ts';
+import { listJavaSettings, readJavaSettings, writeJavaSettings } from './java-settings.ts';
 
 const VERSION_FILE = '.tavernhost-version';
 const JAVA_VERSIONS = [8, 11, 17, 21, 25];
@@ -305,6 +306,7 @@ export const java: GameModule = {
     // Shown only on mod servers (the list gives each mod a side there).
     sides: MOD_SIDES,
     setSide: setContentSide,
+    settings: { list: listJavaSettings, read: readJavaSettings, write: (record, file, values) => writeJavaSettings(record, file, values) },
   },
 
   diagnose: (record, logFile, since) => diagnoseJava(record, logFile, since),

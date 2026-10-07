@@ -8,6 +8,8 @@ import { linkPacks, unlinkPack, getUpdateSettings, setUpdateSettings } from './g
 import { listProxyServers, addProxyServer, removeProxyServer, setDefaultProxyServer, proxyName, prepareBackend } from './games/bungee-network.ts';
 import { downloadNexus, nexusPackage } from './nexus.ts';
 import { nexusKey, nexusUser, setNexusKey, NEXUS_APP } from './nexus-key.ts';
+import { factorioStatus, setFactorioLogin, importFactorioLogin } from './factorio-key.ts';
+import { getDiscord, setDiscord, testDiscord, startDiscordNotifications, NOTIFY_EVENTS } from './discord.ts';
 import { downloadFile } from './download.ts';
 import { serverStats } from './stats.ts';
 import { knownPlayers, setPlayerNote, setPlayerMuted } from './players.ts';
@@ -1089,6 +1091,7 @@ route('GET', '/api/servers/:id/addons', async (ctx) => {
     readOnly: !!addons.readOnly,
     // Added by ID or link instead of a file (Space Engineers: Steam Workshop).
     canAddById: !!addons.addById,
+    byIdPlaceholder: addons.addByIdPlaceholder ?? null,
     share: canShare(inst.record.game) ? { enabled: !!shareToken(inst.id) } : null,
     locations: addons.locations
       ? { options: addons.locations.options, current: addons.locations.get(inst.record), paths: addons.locations.describe(inst.record) }
@@ -1777,7 +1780,33 @@ route('POST', '/api/servers/:id/profiles/:profile/activate', async (ctx) => {
 
 route('GET', '/api/settings/integrations', async (ctx) => {
   needGlobal(ctx, 'panel.settings');
-  return { curseforge: !!curseforgeKey(), nexus: nexusUser() };
+  return { curseforge: !!curseforgeKey(), nexus: nexusUser(), factorio: factorioStatus() };
+});
+
+// factorio.com login (Factorio server downloads and mod portal). Body: {"username","token"}; both "" removes it.
+route('PUT', '/api/settings/integrations/factorio', async (ctx) => {
+  const p = needGlobal(ctx, 'panel.settings');
+  const { username, token } = await readBody(ctx.req);
+  try {
+    await setFactorioLogin(String(username ?? ''), String(token ?? ''));
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+  audit(p, username ? `set the factorio.com login (${String(username).slice(0, 60)})` : 'removed the factorio.com login');
+  return factorioStatus();
+});
+
+// Takes the login the Factorio game saved on this system (%APPDATA%\Factorio\player-data.json).
+route('POST', '/api/settings/integrations/factorio/import', async (ctx) => {
+  const p = needGlobal(ctx, 'panel.settings');
+  let login;
+  try {
+    login = await importFactorioLogin();
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+  audit(p, `imported the factorio.com login from this system (${login?.username})`);
+  return factorioStatus();
 });
 
 // Body: {"curseforgeKey"?: string|null, "nexusKey"?: string|null} (only the keys sent are changed; "" removes).
@@ -1797,6 +1826,41 @@ route('PUT', '/api/settings/integrations', async (ctx) => {
     audit(p, body.nexusKey ? 'set the Nexus Mods API key' : 'removed the Nexus Mods API key');
   }
   return { curseforge: !!curseforgeKey(), nexus: nexusUser() };
+});
+
+// ---------- Discord notifications (per server, through a webhook) ----------
+// The webhook address lets anyone post to that channel, so it's treated like a setting: "Change settings" to see it.
+
+route('GET', '/api/servers/:id/discord', async (ctx) => {
+  needServer(ctx, 'settings.edit', ctx.params[0]);
+  return { ...getDiscord(ctx.params[0]), labels: NOTIFY_EVENTS };
+});
+
+// Body: {"url": "https://discord.com/api/webhooks/…" | "", "events": {"started": true, …}}. An empty url turns it off.
+route('PUT', '/api/servers/:id/discord', async (ctx) => {
+  const p = needServer(ctx, 'settings.edit', ctx.params[0]);
+  const inst = getInstance(ctx.params[0]);
+  const body = await readBody(ctx.req);
+  let s;
+  try {
+    s = setDiscord(inst.id, body);
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+  audit(p, s.url ? `set Discord notifications for "${inst.record.name}"` : `turned off Discord notifications for "${inst.record.name}"`);
+  return { ...s, labels: NOTIFY_EVENTS };
+});
+
+// Body: {"url"?: "…"} (a webhook not saved yet), else the saved one.
+route('POST', '/api/servers/:id/discord/test', async (ctx) => {
+  needServer(ctx, 'settings.edit', ctx.params[0]);
+  const { url } = await readBody(ctx.req);
+  try {
+    await testDiscord(ctx.params[0], url ? String(url) : undefined);
+  } catch (err) {
+    throw new HttpError(400, (err as Error).message);
+  }
+  return { ok: true };
 });
 
 // ---------- backups ----------
@@ -2105,6 +2169,8 @@ function playerActions(inst: ReturnType<typeof getInstance>): string[] {
   const out = ['note'];
   if (inst.record.game === 'valheim') return [...out, ...Object.keys(VALHEIM_LIST_ACTIONS)];
   if (inst.record.game.startsWith('terraria')) return [...out, 'kick', 'ban'];
+  // Games that list their own player commands (Factorio, Project Zomboid, 7 Days to Die).
+  if (inst.module.playerCommands) return [...out, ...Object.keys(inst.module.playerCommands)];
   if (!inst.module.commands) return out;
   out.push('kick', 'op', 'deop');
   if (inst.record.game === 'java') out.push('whitelist-add', 'whitelist-remove', 'ban', 'pardon');
@@ -2152,7 +2218,8 @@ route('POST', '/api/servers/:id/players/:name/action', async (ctx) => {
   // Terraria's console takes the plain name ("kick Some Player"); Minecraft wants it quoted.
   const q = inst.record.game.startsWith('terraria') ? name : `"${name}"`;
   const why = inst.record.game.startsWith('terraria') ? '' : String(reason ?? '').replace(/[\r\n"]/g, ' ').trim().slice(0, 120);
-  const cmd = {
+  const own = inst.module.playerCommands?.[a as keyof NonNullable<typeof inst.module.playerCommands>];
+  const cmd = own ? own(name, why) : {
     kick: `kick ${q}${why ? ` ${why}` : ''}`,
     op: `op ${q}`,
     deop: `deop ${q}`,
@@ -2674,6 +2741,7 @@ function permFor(method: string, sub: string): { server?: ServerPerm; also?: Ser
     [/^\/(server-files|files)/, 'files.view', 'files.edit'],
     [/^\/(update|bedrock-update|game-update)$/, 'view', 'server.update'],
     [/^\/difficulty$/, 'view', 'settings.edit'],
+    [/^\/discord(\/test)?$/, 'settings.edit', 'settings.edit'],
     [/^\/ports$/, 'view', null],
     [/^\/network(\/[^/]+)?$/, 'view', 'properties.edit'],
     [/^\/profiles(\/[^/]+(\/activate)?)?$/, 'view', 'settings.edit'],
@@ -2898,6 +2966,7 @@ for (const inst of listInstances()) {
 startHealthChecks();
 startWorldChecks();
 startUpdateChecks();
+startDiscordNotifications();
 startAppUpdateChecks();
 // Bedrock addons with "Update automatically" on: checked against CurseForge every 6 hours (the first time 10 minutes
 // after start). A pack update is loaded the next time the server starts.

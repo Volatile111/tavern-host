@@ -315,6 +315,19 @@
                 <p class="muted small-text" id="buForceHelp"></p>
               </div>
             </section>
+            <section class="card" id="discordCard" hidden>
+              <h3>Discord notifications</h3>
+              <p class="muted small-text">Posts to a Discord channel when something happens on this server. In Discord: channel settings → Integrations → Webhooks → New Webhook → Copy Webhook URL, then paste it here. No bot needed.</p>
+              <div class="with-button">
+                <input id="discordUrl" type="password" autocomplete="off" spellcheck="false" placeholder="https://discord.com/api/webhooks/…">
+                <button type="button" id="discordTest">Send test message</button>
+              </div>
+              <div class="discord-events" id="discordEvents"></div>
+              <div class="btn-row">
+                <button type="button" class="primary" id="discordSave">Save notifications</button>
+                <span class="muted small-text" id="discordStatus"></span>
+              </div>
+            </section>
             <div class="form-actions">
               <button class="primary" data-perm="settings.edit" type="submit">Save settings</button>
               <span class="muted" id="settingsStatus"></span>
@@ -747,6 +760,17 @@
             <button class="ghost" id="btnRemoveNexusKey">Remove</button>
           </div>
           <p class="muted small-text" id="nexusKeyStatus"></p>
+          <p class="muted">Factorio: the Windows server is the full game, so installing and updating Factorio servers (and downloading mods from the mod portal) needs a factorio.com account that owns the game.
+            Paste your username and token from <a href="https://factorio.com/profile" target="_blank" rel="noopener">factorio.com/profile</a>, or import the login the game saved on this PC.
+            It's checked with factorio.com and stored only on this system.</p>
+          <div class="with-button">
+            <input id="factorioUser" autocomplete="off" spellcheck="false" placeholder="factorio.com username">
+            <input id="factorioToken" type="password" autocomplete="off" placeholder="Token">
+            <button class="primary" id="btnSaveFactorio">Save</button>
+            <button id="btnImportFactorio" hidden>Import from this PC</button>
+            <button class="ghost" id="btnRemoveFactorio">Remove</button>
+          </div>
+          <p class="muted small-text" id="factorioStatus"></p>
           <div id="cfIntegration" hidden>
             <p class="muted">CurseForge: lets you search and install mods and Bedrock addons from CurseForge inside Tavern Host.
               Get a free API key at <a href="https://console.curseforge.com/" target="_blank" rel="noopener">console.curseforge.com</a>
@@ -868,10 +892,10 @@
   <div class="dialog-body">
     <h2 id="msTitle"></h2>
     <p class="muted small-text" id="msSub"></p>
-    <p class="muted small-text">Changes are used when the server (re)starts. <b>To players</b>: players' Tavern Client Mod Manager sets that setting to the server's value in their own game every time it syncs, for settings that work on the player's side (for example Server devcommands' automatic god mode for admins). Anyone with the share link can see those values, so don't send passwords or keys.</p>
+    <p class="muted small-text">Changes are used when the server (re)starts. <span id="msShareHelp"><b>To players</b>: players' Tavern Client Mod Manager sets that setting to the server's value in their own game every time it syncs, for settings that work on the player's side (for example Server devcommands' automatic god mode for admins). Anyone with the share link can see those values, so don't send passwords or keys.</span><span id="msReadOnlyHelp"> Greyed-out settings (lists, multi-line values) can't be changed here: edit the file in the Files tab.</span></p>
     <div class="ms-tools">
       <input id="msFilter" type="search" placeholder="Filter settings…" autocomplete="off" spellcheck="false">
-      <label class="toggle"><input type="checkbox" id="msOnlyShared"> Only the ones sent to players</label>
+      <label class="toggle" id="msOnlySharedRow"><input type="checkbox" id="msOnlyShared"> Only the ones sent to players</label>
     </div>
     <div id="msBody" class="ms-body"></div>
     <div class="form-actions"><span class="muted small-text" id="msStatus"></span><div class="spacer"></div><button id="msCancel">Close</button><button class="primary" id="msSave">Save</button></div>

@@ -40,6 +40,18 @@ function joinNote(record: ServerRecord): string {
       return 'Join with regular Terraria (not tModLoader): Multiplayer → Join via IP.';
     case 'spaceengineers':
       return "Steam downloads this server's Workshop mods by itself when you join (Join Game → Servers, or add it to Steam's favourites).";
+    case 'factorio':
+      return "Factorio downloads this server's mods by itself when you join (Multiplayer → Connect to address). Your game must be on the same version.";
+    case 'palworld':
+      return 'Join from the title screen: Join Multiplayer Game, then enter the address at the bottom.';
+    case 'enshrouded':
+      return 'Play → Join → search for the server by name (or add it to your Steam favourites with this address).';
+    case 'sevendays':
+      return 'Join a Game → Connect to IP, and enter the address and port.';
+    case 'zomboid':
+      return 'Join → Add server: enter the address and port (and the password if there is one).';
+    case 'vrising':
+      return 'Play → Online Play → Find servers → Direct connect, and enter the address and port.';
     case 'satisfactory':
       return "Install the same mods with Satisfactory Mod Manager (each one below opens in it), then Server Manager → Add Server in the game.";
     case 'java':
@@ -109,5 +121,5 @@ export function sharedFile(inst: Shareable, name: string): { file: string; type:
 
 /** Games whose servers can have a share link. */
 export function canShare(game: string): boolean {
-  return ['valheim', 'java', 'satisfactory', 'bedrock', 'terraria', 'spaceengineers'].includes(game);
+  return ['valheim', 'java', 'satisfactory', 'bedrock', 'terraria', 'spaceengineers', 'factorio', 'palworld', 'enshrouded', 'sevendays', 'zomboid', 'vrising'].includes(game);
 }

@@ -1,8 +1,12 @@
-// Server type icons: original drawings (not the projects' logos), one per game / Java server type.
-// Each is a 32x32 rounded tile with a simple symbol.
+// Server type icons, one per game / Java server type. Minecraft server types, Bedrock and Valheim are original drawings
+// (32x32 rounded tiles with a simple symbol); the other games show their own game icon (public/game-icons, from each
+// game's Steam client icon or official website), so the server list says at a glance which game it is.
 
 const tile = (bg, inner) =>
   `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect width="32" height="32" rx="7" fill="${bg}"/>${inner}</svg>`;
+
+/** The game's own icon (public/game-icons/<name>.png). */
+const logo = (name) => `<img src="/game-icons/${name}.png" alt="" draggable="false">`;
 
 // A block drawn as an 8x8 pixel grid filling the tile (rows of colour letters).
 function pixelBlock(rows, colours) {
@@ -69,26 +73,17 @@ const ICONS = {
     '#3a4250',
     '<rect x="10" y="7" width="12" height="3" rx="1" fill="#b3bccb"/><path d="M9 11h14v12a3 3 0 0 1-3 3h-8a3 3 0 0 1-3-3z" fill="#dfe5ee"/><rect x="12" y="15" width="8" height="5" rx="1" fill="#8d99ab"/>',
   ),
-  // A tree on a grassy hill under a night sky
-  terraria: tile(
-    '#1d2a5b',
-    '<circle cx="24" cy="8" r="2.5" fill="#f4f1c9"/><circle cx="9" cy="6" r="0.8" fill="#f4f1c9"/><circle cx="15" cy="9" r="0.6" fill="#f4f1c9"/><path d="M0 24c6-4 12-5 18-3s10 1 14-1v12H0z" fill="#3d8b2f"/><path d="M0 27c6-2 13-2 20 0s9 1 12 0v5H0z" fill="#7a4e2d"/><rect x="11" y="13" width="3" height="9" fill="#6d4427"/><circle cx="12.5" cy="11" r="5" fill="#2f7a2a"/><circle cx="10" cy="13" r="3" fill="#3f9a35"/>',
-  ),
-  // Vanilla Terraria: the same hill and tree, by day
-  'terraria-vanilla': tile(
-    '#4f8fd6',
-    '<circle cx="24" cy="8" r="3" fill="#ffe27a"/><path d="M0 24c6-4 12-5 18-3s10 1 14-1v12H0z" fill="#4caf3a"/><path d="M0 27c6-2 13-2 20 0s9 1 12 0v5H0z" fill="#8a5a36"/><rect x="11" y="13" width="3" height="9" fill="#6d4427"/><circle cx="12.5" cy="11" r="5" fill="#3c8f30"/><circle cx="10" cy="13" r="3" fill="#4fae43"/>',
-  ),
-  // A factory with a conveyor belt
-  satisfactory: tile(
-    '#2b2f36',
-    '<path d="M5 24V14l5 3v-3l5 3v-3l5 3V8h4v16z" fill="#f2a33a"/><rect x="21" y="5" width="2" height="4" fill="#c9cdd3"/><rect x="5" y="24" width="22" height="3" rx="1.5" fill="#c9cdd3"/><circle cx="8" cy="25.5" r="1" fill="#2b2f36"/><circle cx="16" cy="25.5" r="1" fill="#2b2f36"/><circle cx="24" cy="25.5" r="1" fill="#2b2f36"/><rect x="8" y="19" width="3" height="3" fill="#2b2f36"/><rect x="14" y="19" width="3" height="3" fill="#2b2f36"/>',
-  ),
-  // A small ship over a planet
-  spaceengineers: tile(
-    '#0e1426',
-    '<circle cx="9" cy="24" r="9" fill="#3a6fb0"/><path d="M2 22c4 1 9 1 14-2" stroke="#7fb2e8" stroke-width="1.5" fill="none"/><circle cx="25" cy="5" r="0.8" fill="#dfe7f5"/><circle cx="18" cy="4" r="0.6" fill="#dfe7f5"/><path d="M14 13l9-5 5 3-9 5z" fill="#d6dbe3"/><path d="M14 13l5 3v3l-5-3z" fill="#9aa3b1"/><path d="M19 16l9-5v3l-9 5z" fill="#b6bdc8"/><rect x="21" y="9.5" width="2.5" height="1.5" fill="#ffb347"/>',
-  ),
+  // The games' own icons ("terraria" is Terraria with tModLoader: tModLoader's icon).
+  terraria: logo('terraria'),
+  'terraria-vanilla': logo('terraria-vanilla'),
+  satisfactory: logo('satisfactory'),
+  spaceengineers: logo('spaceengineers'),
+  factorio: logo('factorio'),
+  palworld: logo('palworld'),
+  enshrouded: logo('enshrouded'),
+  sevendays: logo('sevendays'),
+  zomboid: logo('zomboid'),
+  vrising: logo('vrising'),
   // Horned helmet
   valheim: tile(
     '#4a1f1a',

@@ -170,6 +170,12 @@ const GAMES: Record<string, string> = {
   satisfactory: 'Satisfactory',
   terraria: 'Terraria (tModLoader)',
   spaceengineers: 'Space Engineers',
+  factorio: 'Factorio',
+  palworld: 'Palworld',
+  enshrouded: 'Enshrouded',
+  sevendays: '7 Days to Die',
+  zomboid: 'Project Zomboid',
+  vrising: 'V Rising',
 };
 
 /** Reads a link of any game. Only the common fields are checked here; each game's sync checks its own part. */

@@ -112,7 +112,8 @@ export function readSettings(record: ServerRecord, file: string) {
     plugin: cfg.plugin,
     version: cfg.version,
     mod: ownerOf(record, file, cfg.plugin, cfg.guid),
-    entries: cfg.entries.map((e: CfgEntry) => ({ ...e, shared: (shared[e.section] ?? []).includes(e.key) })),
+    canShare: true,
+    entries: cfg.entries.map((e: CfgEntry) => ({ ...e, editable: true, shared: (shared[e.section] ?? []).includes(e.key) })),
   };
 }
 
