@@ -1,5 +1,24 @@
 # Changelog
 
+## Tavern Host 0.7.1
+
+**Fixed**
+- **Buttons stopped responding after a confirmation.** In the desktop app, answering a yes/no question (for example banning a player from the Players tab's Actions) could leave the panel ignoring clicks until Tavern Host was closed and opened again. Every confirmation now uses Tavern Host's own dialog. Thanks to Smart74 for reporting it.
+- The Players tab no longer refreshes while you have an Actions menu or a dialog open, so the menu can't close under you.
+
+**Changed**
+- **Valheim: characters on the same account.** Valheim's admin, ban and allow lists hold Steam (or Xbox/PlayStation) accounts, not characters, so banning one character bans every character on that account. The Players tab now shows "Same Steam account as …" on those players, and the confirmation for Ban, Make admin and the allow list names the other characters it also applies to.
+- **The real icons for every server type:** Minecraft Java servers show the Minecraft Launcher's Java Edition grass block, Bedrock the Minecraft for Windows tile, Valheim its own icon, and Paper, Spigot, Fabric, Forge, NeoForge and Sponge servers their project's logo.
+- A thank-you to Smart74, Tavern Host's first user and tester, next to the colour button.
+
+## Tavern Client Mod Manager 0.5.4
+
+**Changed**
+- Satisfactory servers are on the **Other servers** tab now (mods for Satisfactory are installed with Satisfactory Mod Manager, so it didn't need a tab of its own). Each one still lists the server's mods with **Install with SMM**.
+
+**Fixed**
+- Buttons could stop responding after answering a yes/no question (removing a server or a mod, deleting a profile, updating) until the app was reopened. Confirmations now use the app's own dialog.
+
 ## Tavern Host 0.7.0
 
 **New**

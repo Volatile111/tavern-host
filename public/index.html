@@ -73,6 +73,7 @@
       <nav id="serverList"></nav>
       <div class="theme-corner">
         <button type="button" class="theme-btn" id="btnTheme" title="Change colours" aria-label="Change colours" aria-expanded="false"></button>
+        <span class="credit" title="Tavern Host's first user, and the tester who has helped shape it from the start. Thank you!">🍺 Special thanks to <b>Smart74</b>, first user &amp; tester</span>
         <div class="theme-pop" id="themePop" hidden>
           <label for="themeHue">Colour</label>
           <input type="range" id="themeHue" min="0" max="359" step="1" class="hue-slider">
@@ -876,6 +877,13 @@
     <p id="askMessage"></p>
     <input id="askInput" autocomplete="off" spellcheck="false">
     <div class="form-actions"><div class="spacer"></div><button type="button" id="askCancel">Cancel</button><button class="primary" type="submit">OK</button></div>
+  </form>
+</dialog>
+
+<dialog id="confirmDialog">
+  <form class="dialog-body" id="confirmForm">
+    <p id="confirmMessage" class="confirm-message"></p>
+    <div class="form-actions"><div class="spacer"></div><button type="button" id="confirmCancel">Cancel</button><button class="primary" type="submit" id="confirmOk">OK</button></div>
   </form>
 </dialog>
 

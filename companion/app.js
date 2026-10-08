@@ -18,6 +18,31 @@ function toast(msg, bad = false) {
   toastTimer = setTimeout(() => (t.className = ''), 4500);
 }
 
+/** Yes/no in the app's own dialog (true = OK). Not confirm(): after one closes, Electron on Windows often stops
+ * taking clicks until the app is reopened. */
+function confirmBox(message) {
+  return new Promise((resolve) => {
+    const dialog = $('confirmDialog');
+    $('confirmMessage').textContent = message;
+    let answer = false;
+    const done = () => {
+      $('confirmForm').onsubmit = null;
+      $('confirmCancel').onclick = null;
+      dialog.removeEventListener('close', done);
+      resolve(answer);
+    };
+    $('confirmForm').onsubmit = (e) => {
+      e.preventDefault();
+      answer = true;
+      dialog.close();
+    };
+    $('confirmCancel').onclick = () => dialog.close();
+    dialog.addEventListener('close', done);
+    dialog.showModal();
+    $('confirmOk').focus();
+  });
+}
+
 function log(line) {
   const box = $('log');
   const row = el('div', null, `${new Date().toLocaleTimeString()}  ${line}`);
@@ -127,7 +152,7 @@ function render() {
     } else head.append(el('span', 'pill bad', 'unreachable'));
     const rm = el('button', 'small ghost', 'Remove');
     rm.addEventListener('click', async () => {
-      if (!confirm(`Stop following ${l.server ?? 'this server'}? Mods already installed stay.`)) return;
+      if (!await confirmBox(`Stop following ${l.server ?? 'this server'}? Mods already installed stay.`)) return;
       await api.removeLink(l.raw);
       refresh();
     });
@@ -199,7 +224,7 @@ function render() {
       }
       const rm = el('button', 'small danger', 'Remove');
       rm.addEventListener('click', async () => {
-        if (!confirm(`Remove ${m.name}?`)) return;
+        if (!await confirmBox(`Remove ${m.name}?`)) return;
         try {
           await api.removeMod(m.full);
           refresh();
@@ -218,18 +243,21 @@ function render() {
     mods.append(row);
   }
   renderJava();
-  renderSatisfactory();
   renderOther();
   renderTabs();
 }
 
 // ---------- games ----------
 
-const OTHER_GAMES = ['bedrock', 'terraria', 'spaceengineers', 'factorio', 'palworld', 'enshrouded', 'sevendays', 'zomboid', 'vrising'];
+// Games without their own tab: the app only shows how to join (Satisfactory: and which mods to get with SMM).
+const OTHER_GAMES = ['satisfactory', 'bedrock', 'terraria', 'spaceengineers', 'factorio', 'palworld', 'enshrouded', 'sevendays', 'zomboid', 'vrising'];
+const TABS = ['valheim', 'java', 'other'];
 const tabOf = (game) => (OTHER_GAMES.includes(game) ? 'other' : game);
 let currentTab = (() => {
   try {
-    return localStorage.getItem('tcmm-tab') || 'valheim';
+    // A saved tab that no longer exists (Satisfactory had one up to 0.5.3) opens the tab its servers moved to.
+    const saved = localStorage.getItem('tcmm-tab') || 'valheim';
+    return TABS.includes(saved) ? saved : tabOf(saved);
   } catch {
     return 'valheim';
   }
@@ -251,7 +279,7 @@ function renderTabs() {
     b.querySelector('.tab-count')?.remove();
     if (n) b.append(el('span', 'tab-count', String(n)));
   }
-  for (const tab of ['valheim', 'java', 'satisfactory', 'other']) $(`view-${tab}`).hidden = tab !== currentTab;
+  for (const tab of TABS) $(`view-${tab}`).hidden = tab !== currentTab;
   // Sync now / Play are Valheim's (Minecraft has its own Sync button).
   $('btnSync').hidden = $('btnPlay').hidden = currentTab !== 'valheim';
 }
@@ -269,7 +297,7 @@ function linkBox(l, pill) {
   else if (pill) head.append(pill);
   const rm = el('button', 'small ghost', 'Remove');
   rm.addEventListener('click', async () => {
-    if (!confirm(`Stop following ${l.server ?? 'this server'}? Anything already installed stays.`)) return;
+    if (!await confirmBox(`Stop following ${l.server ?? 'this server'}? Anything already installed stays.`)) return;
     await api.removeLink(l.raw);
     refresh();
   });
@@ -369,39 +397,27 @@ async function mcSetup(l, btn) {
   refresh();
 }
 
-function renderSatisfactory() {
-  const box = $('sfLinks');
-  box.innerHTML = '';
-  const list = st.links.filter((l) => l.game === 'satisfactory');
-  if (!list.length) box.append(el('p', 'muted small', 'No Satisfactory servers yet. Add one with its link above.'));
-  for (const l of list) {
-    const mods = l.mods ?? [];
-    const b = linkBox(l, l.ok ? el('span', 'pill ok', mods.length ? `${mods.length} mod${mods.length === 1 ? '' : 's'}` : 'no mods') : null);
-    if (l.ok) {
-      b.append(addressRow(l, 'Server address'));
-      if (l.note) b.append(el('div', 'muted small', l.note));
-      for (const m of mods) {
-        const row = el('div', 'mod');
-        const info = el('div');
-        info.append(el('div', 'name', m.name), el('div', 'muted small', m.id === 'SML' ? `v${m.version} · the mod loader (SMM installs it with the mods)` : `v${m.version}`));
-        row.append(info);
-        const actions = el('div', 'row tight');
-        if (m.id !== 'SML') {
-          const smm = el('button', 'small primary', 'Install with SMM');
-          smm.title = 'Opens this mod in Satisfactory Mod Manager';
-          smm.addEventListener('click', () => api.openExternal(`smmanager://install?modID=${m.id}${/^[\w.\-+]{1,40}$/.test(m.version) ? `&version=${m.version}` : ''}`).catch((err) => toast(err.message, true)));
-          actions.append(smm);
-        }
-        const page = el('button', 'small ghost', 'ficsit.app');
-        page.addEventListener('click', () => api.openExternal(`https://ficsit.app/mod/${m.id}`).catch((err) => toast(err.message, true)));
-        actions.append(page);
-        row.append(actions);
-        b.append(row);
-      }
-      if (mods.length) b.append(el('div', 'muted small', "\"Install with SMM\" needs Satisfactory Mod Manager installed (smm.ficsit.app). Install the version shown, the same as the server's."));
+/** Satisfactory: the server's mods, each opening in Satisfactory Mod Manager (it installs them and their dependencies). */
+function satisfactoryMods(b, mods) {
+  for (const m of mods) {
+    const row = el('div', 'mod');
+    const info = el('div');
+    info.append(el('div', 'name', m.name), el('div', 'muted small', m.id === 'SML' ? `v${m.version} · the mod loader (SMM installs it with the mods)` : `v${m.version}`));
+    row.append(info);
+    const actions = el('div', 'row tight');
+    if (m.id !== 'SML') {
+      const smm = el('button', 'small primary', 'Install with SMM');
+      smm.title = 'Opens this mod in Satisfactory Mod Manager';
+      smm.addEventListener('click', () => api.openExternal(`smmanager://install?modID=${m.id}${/^[\w.\-+]{1,40}$/.test(m.version) ? `&version=${m.version}` : ''}`).catch((err) => toast(err.message, true)));
+      actions.append(smm);
     }
-    box.append(b);
+    const page = el('button', 'small ghost', 'ficsit.app');
+    page.addEventListener('click', () => api.openExternal(`https://ficsit.app/mod/${m.id}`).catch((err) => toast(err.message, true)));
+    actions.append(page);
+    row.append(actions);
+    b.append(row);
   }
+  if (mods.length) b.append(el('div', 'muted small', "\"Install with SMM\" needs Satisfactory Mod Manager installed (smm.ficsit.app). Install the version shown, the same as the server's."));
 }
 
 function renderOther() {
@@ -410,10 +426,13 @@ function renderOther() {
   const list = st.links.filter((l) => OTHER_GAMES.includes(l.game));
   if (!list.length) box.append(el('p', 'muted small', 'No servers for these games yet. Add one with its link above.'));
   for (const l of list) {
-    const b = linkBox(l, l.ok ? el('span', 'pill ok', l.gameName) : null);
+    const mods = l.game === 'satisfactory' ? (l.mods ?? []) : [];
+    const pill = mods.length ? `${l.gameName} · ${mods.length} mod${mods.length === 1 ? '' : 's'}` : l.gameName;
+    const b = linkBox(l, l.ok ? el('span', 'pill ok', pill) : null);
     if (l.ok) {
       b.append(addressRow(l));
       if (l.note) b.append(el('div', 'muted small', l.note));
+      satisfactoryMods(b, mods);
     }
     box.append(b);
   }
@@ -456,7 +475,7 @@ function renderProfiles() {
     del.disabled = st.profiles.length <= 1;
     del.title = del.disabled ? 'Keep at least one modded profile' : '';
     del.addEventListener('click', async () => {
-      if (!confirm(`Delete the profile "${current.name}"? Your mods stay installed.`)) return;
+      if (!await confirmBox(`Delete the profile "${current.name}"? Your mods stay installed.`)) return;
       try {
         await api.deleteProfile(current.id);
       } catch (err) {
@@ -527,7 +546,7 @@ $('btnUpdateApp').addEventListener('click', async (e) => {
     if (!picked) return;
     const cmp = picked.version.split('.').map(Number).reduce((r, n, i) => r || n - (picked.current.split('.').map(Number)[i] ?? 0), 0);
     const note = cmp > 0 ? '' : cmp === 0 ? '\n\nThat is the version you already have (it will be reinstalled).' : '\n\nThat is an OLDER version than the one you have.';
-    if (!confirm(`Update Tavern Client Mod Manager from ${picked.current} to ${picked.version || 'the version in that file'}?${note}\n\nThe app closes, an "Updating" window shows the progress, and the new version opens by itself. Your mods and settings are kept.`)) return;
+    if (!await confirmBox(`Update Tavern Client Mod Manager from ${picked.current} to ${picked.version || 'the version in that file'}?${note}\n\nThe app closes, an "Updating" window shows the progress, and the new version opens by itself. Your mods and settings are kept.`)) return;
     await api.runUpdate();
     toast('Updating… watch the "Updating" window');
   } catch (err) {
@@ -573,7 +592,7 @@ api.on('update-progress', (p) => {
 
 $('btnInstallAppUpdate').addEventListener('click', async () => {
   if (!appUpdate?.available) return;
-  if (!confirm(`Update to ${appUpdate.latest}?\n\nIt downloads from GitHub, then the app closes, an "Updating" window shows the progress, and the new version opens by itself. Your mods and settings are kept.`)) return;
+  if (!await confirmBox(`Update to ${appUpdate.latest}?\n\nIt downloads from GitHub, then the app closes, an "Updating" window shows the progress, and the new version opens by itself. Your mods and settings are kept.`)) return;
   const btn = $('btnInstallAppUpdate');
   btn.disabled = true;
   try {
@@ -627,7 +646,7 @@ $('nexusKeyForm').addEventListener('submit', async (e) => {
   });
 });
 $('nexusKeyRemove').addEventListener('click', async () => {
-  if (!confirm('Remove the saved Nexus Mods API key from this PC?')) return;
+  if (!await confirmBox('Remove the saved Nexus Mods API key from this PC?')) return;
   await api.setNexusKey('');
   toast('Key removed');
   refresh();
@@ -656,7 +675,7 @@ $('linkForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const raw = $('linkInput').value.trim();
   if (!raw) return;
-  const ok = confirm(
+  const ok = await confirmBox(
     'Follow this server?\n\nFor Valheim and modded Minecraft, the server owner decides which mods run in your game. Mods are programs that run on your PC, so only follow servers whose owner you trust.\n\nEvery mod is safety-checked before it is installed (Windows Defender, plus Thunderstore or Modrinth). Anything not from those sites, or that the check flags, waits for your approval.',
   );
   if (!ok) return;

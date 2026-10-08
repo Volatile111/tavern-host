@@ -41,7 +41,7 @@
 
   <section class="card">
     <h3>Add a server</h3>
-    <p class="muted">Paste the link from the server owner (their Tavern Host → the server's Mods tab → Share mods with players). Works for Valheim, Minecraft Java, Satisfactory, Minecraft Bedrock, Terraria (tModLoader) and Space Engineers servers.</p>
+    <p class="muted">Paste the link from the server owner (their Tavern Host → the server's Mods tab → Share mods with players). Works for Valheim, Minecraft Java, Minecraft Bedrock, Satisfactory, Terraria (tModLoader), Space Engineers, Factorio, Palworld, Enshrouded, V Rising, Project Zomboid and 7 Days to Die servers.</p>
     <form id="linkForm" class="row">
       <input id="linkInput" placeholder="thmods://192.168.1.50:8191/…" spellcheck="false" autocomplete="off">
       <button class="primary" type="submit">Add server</button>
@@ -52,7 +52,6 @@
   <nav class="game-tabs" id="gameTabs">
     <button type="button" data-game="valheim">Valheim</button>
     <button type="button" data-game="java">Minecraft Java</button>
-    <button type="button" data-game="satisfactory">Satisfactory</button>
     <button type="button" data-game="other">Other servers</button>
   </nav>
 
@@ -67,18 +66,10 @@
     </section>
   </div>
 
-  <div class="view" id="view-satisfactory" hidden>
-    <section class="card">
-      <h3>Satisfactory servers</h3>
-      <p class="muted small">Satisfactory mods are installed with <a href="https://smm.ficsit.app/" target="_blank" rel="noopener">Satisfactory Mod Manager</a> (SMM), which handles versions and dependencies. Each mod below opens in SMM; install the same ones as the server, then join through Server Manager in the game.</p>
-      <div id="sfLinks"></div>
-    </section>
-  </div>
-
   <div class="view" id="view-other" hidden>
     <section class="card">
       <h3>Other servers</h3>
-      <p class="muted small">These games download what a server needs by themselves when you join, so there's nothing to sync. Here are the join details.</p>
+      <p class="muted small">Nothing to sync for these games: most download what a server needs by themselves when you join, so here are the join details. Satisfactory servers list their mods, each opening in <a href="https://smm.ficsit.app/" target="_blank" rel="noopener">Satisfactory Mod Manager</a> (SMM), which installs them with their dependencies.</p>
       <div id="otherLinks"></div>
     </section>
   </div>
@@ -171,6 +162,12 @@
     you may use, change and share it, and the <a href="https://github.com/Volatile111/tavern-host/tree/main/companion" target="_blank" rel="noopener">source code</a> is public. It comes with no warranty.
     Not affiliated with Iron Gate, Mojang/Microsoft, Coffee Stain, Re-Logic, Keen Software House, Thunderstore, Modrinth, Hexium or Nexus Mods.</p>
   <div class="row review-actions"><span class="spacer"></span><button id="aboutClose">Close</button></div>
+</dialog>
+<dialog id="confirmDialog" class="confirm">
+  <form id="confirmForm">
+    <p id="confirmMessage"></p>
+    <div class="row review-actions"><span class="spacer"></span><button type="button" class="ghost" id="confirmCancel">Cancel</button><button type="submit" class="primary" id="confirmOk">OK</button></div>
+  </form>
 </dialog>
 <div id="toast"></div>
 </body>

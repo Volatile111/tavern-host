@@ -176,6 +176,8 @@ main { overflow-y: auto; padding: 20px 24px; }
 .whats-new ul { margin: 4px 0 12px; padding-left: 20px; }
 .whats-new li { margin: 4px 0; line-height: 1.45; }
 #askMessage { margin: 0 0 10px; white-space: pre-line; }
+#confirmDialog { width: min(520px, calc(100vw - 32px)); }
+.confirm-message { margin: 0 0 14px; white-space: pre-line; line-height: 1.45; max-height: 60vh; overflow-y: auto; }
 #askInput { width: 100%; }
 .ports-facts { display: grid; gap: 4px; margin: 12px 0; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; font-size: 13.5px; }
 .about h2 { display: flex; align-items: center; gap: 10px; }
@@ -187,7 +189,10 @@ main { overflow-y: auto; padding: 20px 24px; }
 
 .sidebar { display: flex; flex-direction: column; }
 #serverList { flex: 1; }
-.theme-corner { position: relative; padding: 12px 16px; border-top: 1px solid var(--border); }
+.theme-corner { position: relative; padding: 12px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.theme-corner .theme-btn { flex: none; }
+.credit { font-size: 11.5px; line-height: 1.35; color: var(--muted); }
+.credit b { color: var(--accent); font-weight: 700; }
 .theme-btn {
   width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid var(--border);
   background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
@@ -592,6 +597,7 @@ dialog.perm-dialog { width: min(1000px, calc(100vw - 32px)); max-width: none; }
 .player-row:not(:has(.head)):has(.pl-actions) { grid-template-columns: 1fr auto auto auto auto; }
 .pl-actions { width: auto; padding: 4px 8px; font-size: 12px; }
 .player-row .who .pl-note { font-size: 12px; color: var(--gold); white-space: normal; }
+.player-row .who .pl-shared { color: var(--amber); white-space: normal; }
 .player-row .who b .type-badge { vertical-align: 1px; }
 .chat-msg.held .chat-text { opacity: .55; text-decoration: line-through; }
 .chat-via.held { color: #fca5a5; border-color: #7f1d1d; }
@@ -614,6 +620,7 @@ dialog.perm-dialog { width: min(1000px, calc(100vw - 32px)); max-width: none; }
 .srv-icon { display: inline-block; flex: none; position: relative; line-height: 0; }
 .srv-icon svg { width: 100%; height: 100%; display: block; }
 .srv-icon img { width: 100%; height: 100%; display: block; object-fit: contain; border-radius: 22%; }
+.srv-icon img.pixel { image-rendering: pixelated; }
 .srv-icon.side { width: 30px; height: 30px; align-self: flex-start; margin-top: 2px; }
 .srv-icon.side .dot { position: absolute; right: -3px; bottom: -3px; width: 11px; height: 11px; border: 2px solid var(--panel); }
 .srv-icon.big { width: 46px; height: 46px; }

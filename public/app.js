@@ -94,6 +94,35 @@ function ask(message, value = '') {
   });
 }
 
+/**
+ * Asks yes/no in the panel's own dialog; resolves to true for OK. Used instead of confirm(): in the desktop app
+ * (Electron on Windows) the page often stopped taking clicks after a native confirm box closed, until Tavern Host was
+ * reopened.
+ */
+function confirmBox(message, okLabel = 'OK') {
+  return new Promise((resolve) => {
+    const dialog = $('confirmDialog');
+    $('confirmMessage').textContent = message;
+    $('confirmOk').textContent = okLabel;
+    let answer = false;
+    const done = () => {
+      $('confirmForm').onsubmit = null;
+      $('confirmCancel').onclick = null;
+      dialog.removeEventListener('close', done);
+      resolve(answer);
+    };
+    $('confirmForm').onsubmit = (e) => {
+      e.preventDefault();
+      answer = true;
+      dialog.close();
+    };
+    $('confirmCancel').onclick = () => dialog.close();
+    dialog.addEventListener('close', done);
+    dialog.showModal();
+    $('confirmOk').focus();
+  });
+}
+
 function show(view) {
   for (const v of ['viewSetup', 'viewLogin', 'viewApp']) $(v).hidden = v !== view;
 }
@@ -786,7 +815,7 @@ for (const action of ['start', 'stop', 'restart']) {
         // 428: a check before starting found a problem (world database damaged, or the server already running from
         // another program). Starting anyway is possible, but it's the owner's call.
         if (err.status !== 428) throw err;
-        if (!confirm(`${err.message}\n\nStart anyway?`)) return;
+        if (!await confirmBox(`${err.message}\n\nStart anyway?`)) return;
         await go({ force: true });
       }
       toast(action === 'stop' ? 'Stopping (the world is saved first)…' : `${action[0].toUpperCase()}${action.slice(1)}ing…`);
@@ -1106,6 +1135,11 @@ async function renderPlayersTab() {
   list.innerHTML = '';
   if (!data.players.length) list.appendChild(el('p', 'muted', 'Nobody has joined yet.'));
   const showHeads = data.game !== 'valheim';
+  // Several names on one account ID (Valheim: one Steam/Xbox account playing several characters). Valheim's admin,
+  // ban and allow lists hold account IDs, so those actions apply to all of that account's characters.
+  const byId = new Map();
+  for (const p of data.players) if (p.id) byId.set(p.id, [...(byId.get(p.id) ?? []), p.name]);
+  const others = (p) => (p.id ? byId.get(p.id).filter((n) => n !== p.name) : []);
   for (const p of data.players) {
     const row = el('div', `player-row${p.online ? ' online' : ''}`);
     if (showHeads) row.appendChild(playerHead(data.game, p));
@@ -1118,14 +1152,20 @@ async function renderPlayersTab() {
     if (p.permitted && p.allowListOn) nameLine.appendChild(el('span', 'type-badge', 'Allowed'));
     who.appendChild(nameLine);
     if (p.id) who.appendChild(el('span', 'muted small-text mono', p.id));
+    if (others(p).length) who.appendChild(el('span', 'pl-shared small-text', `Same ${accountKind(p.id)} account as ${others(p).join(', ')}`));
     if (p.note) who.appendChild(el('span', 'pl-note', `📝 ${p.note}`));
     row.appendChild(who);
     row.appendChild(el('span', `pl-status${p.online ? ' on' : ''}`, p.online ? `● online${p.joinedAt ? ` · ${duration(Date.now() - p.joinedAt)}` : ''}` : `last seen ${fmtAgo(p.lastSeen)}`));
     row.appendChild(el('span', 'muted small-text', `${p.joins} join${p.joins === 1 ? '' : 's'} · ${fmtPlaytime(p.playSeconds)} played`));
     row.appendChild(el('span', 'muted small-text', `first seen ${new Date(p.firstSeen).toLocaleDateString()}`));
-    if (data.canManage) row.appendChild(playerActionMenu(p, data));
+    if (data.canManage) row.appendChild(playerActionMenu(p, data, others(p)));
     list.appendChild(row);
   }
+}
+
+/** "Steam" for "Steam_7656…", "Xbox" for "Xbox_…" (Valheim's platform IDs); "game" otherwise. */
+function accountKind(id) {
+  return /^(Steam|Xbox|PlayStation)_/.exec(id ?? '')?.[1] ?? 'game';
 }
 
 const PLAYER_ACTION_LABELS = {
@@ -1152,7 +1192,7 @@ const PLAYER_ACTION_LABELS = {
 const LIST_ACTIONS = new Set(['admin-add', 'admin-remove', 'list-ban', 'list-unban', 'permit-add', 'permit-remove']);
 
 /** "Actions" dropdown for one player: only what this game and this player's state allow. */
-function playerActionMenu(p, data) {
+function playerActionMenu(p, data, sameAccount = []) {
   const sel = el('select', 'pl-actions');
   sel.appendChild(new Option('Actions…', ''));
   for (const a of data.actions) {
@@ -1182,7 +1222,7 @@ function playerActionMenu(p, data) {
       const note = await ask(`Note about ${p.name} (only admins see this; empty to clear):`, p.note ?? '');
       if (note === null) return;
       body.note = note;
-    } else if (!['mute', 'unmute'].includes(a) && !confirm(`${PLAYER_ACTION_LABELS[a]}: ${p.name}?`)) return;
+    } else if (!['mute', 'unmute'].includes(a) && !(await confirmBox(playerActionQuestion(a, p, sameAccount), PLAYER_ACTION_LABELS[a].replace('…', '')))) return;
     try {
       const r = await api('POST', `/api/servers/${state.selected}/players/${encodeURIComponent(p.name)}/action`, body);
       toast(r?.message ?? (a === 'note' ? 'Note saved' : a === 'mute' ? `${p.name} is muted (their messages are held back)` : `${PLAYER_ACTION_LABELS[a].replace('…', '')}: ${p.name}`));
@@ -1193,7 +1233,34 @@ function playerActionMenu(p, data) {
   });
   return sel;
 }
-setInterval(() => state.tab === 'players' && !document.hidden && renderPlayersTab(), 5000);
+
+// What a Valheim list action also does to the account's other characters (the lists hold account IDs, not names).
+// [one other character, several]
+const LIST_ACTION_TOO = {
+  'admin-add': ['becomes an admin too', 'become admins too'],
+  'admin-remove': ['stops being an admin too', 'stop being admins too'],
+  'list-ban': ['is banned too', 'are banned too'],
+  'list-unban': ['is unbanned too', 'are unbanned too'],
+  'permit-add': ['goes on the allow list too', 'go on the allow list too'],
+  'permit-remove': ['comes off the allow list too', 'come off the allow list too'],
+};
+
+function playerActionQuestion(a, p, sameAccount) {
+  const q = `${PLAYER_ACTION_LABELS[a].replace('…', '')}: ${p.name}?`;
+  if (!LIST_ACTION_TOO[a] || !sameAccount.length) return q;
+  const [one, several] = LIST_ACTION_TOO[a];
+  const names = sameAccount.length > 1 ? `${sameAccount.slice(0, -1).join(', ')} and ${sameAccount.at(-1)}` : sameAccount[0];
+  const who = sameAccount.length > 1 ? `they ${several}` : `that character ${one}`;
+  return `${q}\n\nValheim's lists work by ${accountKind(p.id)} account, not by character. This account (${p.id}) also plays as ${names}: ${who}.`;
+}
+
+// Live refresh, except while someone is using an Actions menu or answering a dialog (rebuilding the list would close
+// the open menu, or act on a list that changed under them).
+setInterval(() => {
+  if (state.tab !== 'players' || document.hidden) return;
+  if (document.activeElement?.matches?.('#plList select') || document.querySelector('dialog[open]')) return;
+  renderPlayersTab();
+}, 5000);
 
 /**
  * Draws a time-based line graph: x = time over the chosen range (now at the right), y = value / max.
@@ -1598,7 +1665,7 @@ $('btnSaveProps').addEventListener('click', async () => {
   }
 });
 $('btnRepairProps').addEventListener('click', async () => {
-  if (!confirm('Rebuild server.properties from the official template, keeping your current values? A backup copy is saved next to it.')) return;
+  if (!await confirmBox('Rebuild server.properties from the official template, keeping your current values? A backup copy is saved next to it.')) return;
   try {
     const result = await api('POST', `/api/servers/${state.selected}/properties/repair`);
     props = result;
@@ -1673,7 +1740,7 @@ function renderNetwork() {
       }
       const rm = el('button', 'small red ghost', 'Remove');
       rm.addEventListener('click', async () => {
-        if (!confirm(`Remove ${s.name} from the proxy's server list? (The server itself is not touched.)`)) return;
+        if (!await confirmBox(`Remove ${s.name} from the proxy's server list? (The server itself is not touched.)`)) return;
         try {
           networkState = { ...networkState, ...(await api('DELETE', `/api/servers/${state.detail.id}/network/${encodeURIComponent(s.name)}`)) };
           renderNetwork();
@@ -1853,7 +1920,7 @@ function renderProfiles() {
       if (!active) {
         const del = el('button', 'small red ghost', 'Delete');
         del.addEventListener('click', async () => {
-          if (!confirm(`Delete the profile "${p.name}"? Its world and mods stay on the server.`)) return;
+          if (!await confirmBox(`Delete the profile "${p.name}"? Its world and mods stay on the server.`)) return;
           try {
             profiles = await api('DELETE', `/api/servers/${state.selected}/profiles/${p.id}`);
             renderProfiles();
@@ -1871,7 +1938,7 @@ function renderProfiles() {
 
 async function switchProfile(p) {
   const running = ['running', 'starting'].includes(state.detail.status);
-  if (running && !confirm(`Switch to "${p.name}"?\n\nThe server restarts (players are disconnected) and starts world "${p.world}"${p.vanilla ? ' without mods' : ''}.`)) return;
+  if (running && !await confirmBox(`Switch to "${p.name}"?\n\nThe server restarts (players are disconnected) and starts world "${p.world}"${p.vanilla ? ' without mods' : ''}.`)) return;
   try {
     profiles = await api('POST', `/api/servers/${state.selected}/profiles/${p.id}/activate`, { restart: running });
     toast(`Switched to ${p.name}${running ? '; the server is restarting' : ''}`);
@@ -2126,7 +2193,7 @@ $('btnBuUpdate').addEventListener('click', async () => {
     const answer = await ask('The server is running. Warn players for how many minutes before it stops to update? (0 = right away)', '5');
     if (answer === null) return;
     minutes = Math.max(0, Math.min(Number(answer) || 0, 60));
-  } else if (!confirm('Update to the latest version? The world is backed up first.')) return;
+  } else if (!await confirmBox('Update to the latest version? The world is backed up first.')) return;
   try {
     await api('POST', `/api/servers/${state.selected}/game-update`, { countdownMinutes: minutes });
     toast(running ? `Updating after a ${minutes}-minute countdown. Progress in the console.` : 'Updating… progress in the console.');
@@ -2146,7 +2213,7 @@ $('btnBuForce').addEventListener('click', async () => {
     const answer = await ask(`Force update: Tavern Host checks ${src} right now and installs the latest server, even if this one looks up to date.\n\nThe server is running. Warn players for how many minutes before it stops? (0 = right away)`, '5');
     if (answer === null) return;
     minutes = Math.max(0, Math.min(Number(answer) || 0, 60));
-  } else if (!confirm(`Force update: check ${src} right now and install the latest server, even if this one looks up to date?\n\nThe world is backed up first; worlds and settings are kept.`)) return;
+  } else if (!await confirmBox(`Force update: check ${src} right now and install the latest server, even if this one looks up to date?\n\nThe world is backed up first; worlds and settings are kept.`)) return;
   $('btnBuForce').disabled = true;
   $('buChecked').textContent = `Checking ${src}…`;
   try {
@@ -2404,7 +2471,7 @@ function browseRow(entry) {
     del.addEventListener('click', async (e) => {
       e.stopPropagation();
       const what = entry.type === 'dir' ? `the folder "${entry.name}" and everything in it` : `"${entry.name}"`;
-      if (!confirm(`Delete ${what}?\n\nIt goes to the Recycle Bin (on network drives it is deleted permanently).`)) return;
+      if (!await confirmBox(`Delete ${what}?\n\nIt goes to the Recycle Bin (on network drives it is deleted permanently).`)) return;
       try {
         await api('POST', '/api/files/delete', { path: full });
         toast('Deleted');
@@ -2590,7 +2657,7 @@ function renderTasks() {
       const run = el('button', 'small', '▶ Run now');
       run.disabled = t.running;
       run.addEventListener('click', async () => {
-        if (!confirm(`Run "${t.name}" now?\n\n${t.jobs.map(describeJob).join('\n')}`)) return;
+        if (!await confirmBox(`Run "${t.name}" now?\n\n${t.jobs.map(describeJob).join('\n')}`)) return;
         try {
           await api('POST', `/api/servers/${state.selected}/tasks/${t.id}/run`);
           toast(`Running "${t.name}"`);
@@ -2619,7 +2686,7 @@ function renderTasks() {
       edit.addEventListener('click', () => openTaskDialog(t));
       const del = el('button', 'small red ghost', 'Delete');
       del.addEventListener('click', async () => {
-        if (!confirm(`Delete the task "${t.name}"?`)) return;
+        if (!await confirmBox(`Delete the task "${t.name}"?`)) return;
         try {
           await api('DELETE', `/api/servers/${state.selected}/tasks/${t.id}`);
           loadTasks();
@@ -2963,9 +3030,9 @@ $('worldCheats').addEventListener('change', () => {
   renderCheatSettings();
   worldDirty();
 });
-$('worldUnlock').addEventListener('click', (e) => {
+$('worldUnlock').addEventListener('click', async (e) => {
   e.preventDefault();
-  const ok = confirm(
+  const ok = await confirmBox(
     'Unlock experiments?\n\nThe game never lets you turn experiments off, because the world may contain experimental blocks, items or data that break without them (missing blocks, lost items, or a world that won\'t load).\n\nTavern Host keeps a copy of the world settings file (level.dat.tavernhost-bak), but make a backup on the Backups tab first to be safe.',
   );
   if (!ok) return;
@@ -2975,7 +3042,7 @@ $('worldUnlock').addEventListener('click', (e) => {
 $('worldReset').addEventListener('click', renderWorld);
 $('worldSave').addEventListener('click', async () => {
   const running = ['running', 'starting'].includes(state.detail.status);
-  if (running && !confirm('Restart the server now to apply these world settings? Players will be disconnected for a moment.')) return;
+  if (running && !await confirmBox('Restart the server now to apply these world settings? Players will be disconnected for a moment.')) return;
   $('worldSave').disabled = true;
   $('worldStatus').textContent = running ? 'Stopping the server, applying, starting again…' : 'Saving…';
   try {
@@ -3077,7 +3144,7 @@ function serverFileRow(entry) {
   del.addEventListener('click', async (e) => {
     e.stopPropagation();
     const what = entry.type === 'dir' ? `the folder "${entry.name}" and everything in it` : `"${entry.name}"`;
-    if (!confirm(`Delete ${what}?\n\nIt goes to the Recycle Bin (on network drives it is deleted permanently).`)) return;
+    if (!await confirmBox(`Delete ${what}?\n\nIt goes to the Recycle Bin (on network drives it is deleted permanently).`)) return;
     try {
       await api('POST', `/api/servers/${state.selected}/files/delete`, { path: rel });
       toast('Deleted');
@@ -3208,10 +3275,11 @@ $('editText').addEventListener('keydown', (e) => {
     t.setRangeText('  ', a, b, 'end');
   }
 });
-function closeEditor(e) {
-  if ($('editText').value !== editor.original && !confirm('Close without saving your changes?')) {
+async function closeEditor(e) {
+  if ($('editText').value !== editor.original) {
+    // Esc (the dialog's cancel event) has to be stopped now; the dialog closes below if they confirm.
     e?.preventDefault();
-    return;
+    if (!(await confirmBox('Close without saving your changes?', 'Close'))) return;
   }
   $('editDialog').close();
 }
@@ -3640,7 +3708,7 @@ async function loadNodes() {
     });
     const remove = el('button', 'small red ghost', 'Remove');
     remove.addEventListener('click', async () => {
-      if (!confirm(`Remove "${n.name}"? Its servers disappear from this panel (they keep running on that system). You can add it again with a new code.`)) return;
+      if (!await confirmBox(`Remove "${n.name}"? Its servers disappear from this panel (they keep running on that system). You can add it again with a new code.`)) return;
       await api('DELETE', `/api/nodes/${n.id}`).catch((err) => toast(err.message, true));
       refreshPanelName();
       loadNodes();
@@ -3853,7 +3921,7 @@ async function loadWorlds(data) {
     if (!w.active && hasPerm('files.edit')) {
       const del = el('button', 'small red ghost', 'Delete');
       del.addEventListener('click', async () => {
-        if (!confirm(`Delete the world "${w.name}"? It goes to the Recycle Bin.`)) return;
+        if (!await confirmBox(`Delete the world "${w.name}"? It goes to the Recycle Bin.`)) return;
         try {
           loadWorlds(await api('DELETE', `/api/servers/${id}/worlds/${encodeURIComponent(w.folder)}`));
           toast('World moved to the Recycle Bin');
@@ -3874,7 +3942,7 @@ $('worldImportFile').addEventListener('change', async () => {
   if (!file) return;
   const name = await ask('Name for the imported world (leave empty to use the name inside the file):', '');
   if (name === null) return;
-  const activate = hasPerm('properties.edit') && confirm('Make it the active world (loaded at the next start)?');
+  const activate = hasPerm('properties.edit') && await confirmBox('Make it the active world (loaded at the next start)?');
   $('worldsStatus').textContent = `Importing ${file.name}…`;
   try {
     const res = await fetch(`/api/servers/${state.selected}/worlds/import?name=${encodeURIComponent(name)}&activate=${activate ? 1 : 0}`, {
@@ -4069,7 +4137,7 @@ window.desktop?.onUpdateProgress?.((p) => {
 $('btnInstallUpdate').addEventListener('click', async () => {
   const u = state.appUpdate;
   if (!u?.available) return;
-  if (!confirm(`Install Tavern Host ${u.latest}?\n\nIt downloads from GitHub, then Tavern Host closes and opens again by itself. Game servers keep running.`)) return;
+  if (!await confirmBox(`Install Tavern Host ${u.latest}?\n\nIt downloads from GitHub, then Tavern Host closes and opens again by itself. Game servers keep running.`)) return;
   $('btnInstallUpdate').disabled = true;
   $('updateStatus').textContent = 'Starting the download…';
   try {
@@ -4174,7 +4242,7 @@ $('btnUpdateFile').addEventListener('click', async () => {
     );
   }
   lines.push('\nTavern Host closes and opens again by itself when the update is done.');
-  if (!confirm(lines.join('\n'))) return;
+  if (!await confirmBox(lines.join('\n'))) return;
   $('btnUpdateFile').disabled = true;
   try {
     for (const s of oldStyle) {
@@ -4480,7 +4548,7 @@ function renderUsers() {
       if (u.sessions) {
         const out = el('button', 'small ghost', 'Sign out everywhere');
         out.addEventListener('click', async () => {
-          if (!confirm(`Sign ${u.username} out of every browser and device?`)) return;
+          if (!await confirmBox(`Sign ${u.username} out of every browser and device?`)) return;
           try {
             await api('POST', `/api/users/${u.id}/signout`);
             toast(`${u.username} was signed out everywhere`);
@@ -4504,7 +4572,7 @@ function renderUsers() {
     if (u.role !== 'owner' && u.id !== state.user.id) {
       const del = el('button', 'small red ghost', 'Delete');
       del.addEventListener('click', async () => {
-        if (!confirm(`Delete user ${u.username}? They are logged out immediately.`)) return;
+        if (!await confirmBox(`Delete user ${u.username}? They are logged out immediately.`)) return;
         try {
           await api('DELETE', `/api/users/${u.id}`);
           toast('User deleted');
@@ -4616,7 +4684,7 @@ async function loadKeys() {
     edit.addEventListener('click', () => openKeyDialog(k));
     const del = el('button', 'small red ghost', 'Delete');
     del.addEventListener('click', async () => {
-      if (!confirm(`Delete the key "${k.name}"? Anything using it stops working immediately.`)) return;
+      if (!await confirmBox(`Delete the key "${k.name}"? Anything using it stops working immediately.`)) return;
       try {
         await api('DELETE', `/api/apikeys/${k.id}`);
         toast('Key deleted');
@@ -5093,7 +5161,7 @@ async function loadBackups() {
       restore.disabled = !stopped;
       restore.title = stopped ? '' : 'Stop the server first';
       restore.addEventListener('click', async () => {
-        if (!confirm(`Restore the backup from ${new Date(b.createdAt).toLocaleString()}?\n\nThe current world is backed up first, so you can undo this.`)) return;
+        if (!await confirmBox(`Restore the backup from ${new Date(b.createdAt).toLocaleString()}?\n\nThe current world is backed up first, so you can undo this.`)) return;
         try {
           await api('POST', `/api/servers/${state.selected}/backups/${b.id}/restore`);
           toast('Restoring…');
@@ -5105,7 +5173,7 @@ async function loadBackups() {
       del.hidden = !hasPerm('backups.delete');
       del.addEventListener('click', async () => {
         const last = b.id === goodId ? '\n\nThis is the newest backup whose world passed its check (the last known-good copy).' : '';
-        if (!confirm(`Delete this backup permanently?${last}`)) return;
+        if (!await confirmBox(`Delete this backup permanently?${last}`)) return;
         try {
           await api('DELETE', `/api/servers/${state.selected}/backups/${b.id}`);
           loadBackups();
@@ -5223,7 +5291,7 @@ $('btnWorldCheck').addEventListener('click', async () => {
   }
 });
 $('btnWorldAccept').addEventListener('click', async () => {
-  if (!confirm('Accept the world as it is now?\n\nOnly do this if the flagged chunks were changed on purpose (e.g. trimmed with a tool). Later checks will compare with the world as it is now, and this damage won\'t be reported again.')) return;
+  if (!await confirmBox('Accept the world as it is now?\n\nOnly do this if the flagged chunks were changed on purpose (e.g. trimmed with a tool). Later checks will compare with the world as it is now, and this damage won\'t be reported again.')) return;
   try {
     renderWorldCheck(await api('POST', `/api/servers/${state.selected}/world-check/accept`));
     toast('Accepted.');
@@ -5396,7 +5464,7 @@ function renderAddonStatus() {
   if (s.setupLabel && hasPerm('addons.manage')) {
     const btn = el('button', 'primary', s.setupLabel);
     btn.addEventListener('click', async () => {
-      if (s.confirm && !confirm(s.confirm)) return;
+      if (s.confirm && !await confirmBox(s.confirm)) return;
       btn.disabled = true;
       btn.textContent = 'Installing…';
       try {
@@ -5498,7 +5566,7 @@ async function linkCurseforge(p, packUrl) {
 }
 
 async function unlinkCurseforge(p, packUrl) {
-  if (!confirm(`Stop checking CurseForge for updates to "${p.name}"? (The addon stays installed.)`)) return;
+  if (!await confirmBox(`Stop checking CurseForge for updates to "${p.name}"? (The addon stays installed.)`)) return;
   try {
     const r = await api('POST', `${packUrl}/curseforge`, { projectId: null });
     addonState.packs = r.packs;
@@ -5678,7 +5746,7 @@ function renderShare(info) {
   }
   const regen = el('button', 'small ghost', 'Make a new link (the old one stops working)');
   regen.addEventListener('click', async () => {
-    if (!confirm('Make a new link? Players using the old one will have to paste the new one.')) return;
+    if (!await confirmBox('Make a new link? Players using the old one will have to paste the new one.')) return;
     renderShare(await api('POST', `/api/servers/${state.selected}/share`, { enabled: true, newLink: true }));
   });
   body.appendChild(regen);
@@ -5930,13 +5998,16 @@ function renderModSettings() {
 
 $('msFilter').addEventListener('input', renderModSettings);
 $('msOnlyShared').addEventListener('change', renderModSettings);
-$('msCancel').addEventListener('click', () => {
-  if (msStatus() && !confirm('Close without saving your changes?')) return;
+async function closeModSettings(e) {
+  if (msStatus()) {
+    // Esc (the dialog's cancel event) has to be stopped now; the dialog closes below if they confirm.
+    e?.preventDefault();
+    if (!(await confirmBox('Close without saving your changes?', 'Close'))) return;
+  }
   $('modSettingsDialog').close();
-});
-$('modSettingsDialog').addEventListener('cancel', (e) => {
-  if (msStatus() && !confirm('Close without saving your changes?')) e.preventDefault();
-});
+}
+$('msCancel').addEventListener('click', () => closeModSettings());
+$('modSettingsDialog').addEventListener('cancel', (e) => closeModSettings(e));
 $('msSave').addEventListener('click', async () => {
   const values = [...msState.edits].map(([id, value]) => ({ ...msSplit(id), value }));
   const shared = [...msState.shared].map(msSplit);
@@ -6201,7 +6272,7 @@ function addonRow(p, compact = false) {
       // Turning on something flagged as incompatible: say why, and let the owner decide.
       if (on && incompatible) {
         const why = p.warnings.filter((w) => w.level === 'error').map((w) => `• ${w.text}`).join('\n');
-        if (!confirm(`"${p.name}" is marked incompatible with this server:\n\n${why}\n\nIt may not work, or may stop the server from starting (you can switch it off again here). Force it on anyway?`)) {
+        if (!await confirmBox(`"${p.name}" is marked incompatible with this server:\n\n${why}\n\nIt may not work, or may stop the server from starting (you can switch it off again here). Force it on anyway?`)) {
           cb.checked = false;
           return;
         }
@@ -6231,7 +6302,7 @@ function addonRow(p, compact = false) {
         : p.location
           ? `Remove "${p.name}"? Its files are deleted and it's taken out of the world.`
           : `Remove "${p.name}"? The file ${p.file} is deleted from the server.`;
-      if (!confirm(msg)) return;
+      if (!await confirmBox(msg)) return;
       try {
         addonState.packs = (await api('DELETE', packUrl)).packs;
         renderAddons();
@@ -6262,7 +6333,7 @@ function addonRow(p, compact = false) {
     // Added by hand outside Tavern Host: can only be removed.
     const rm = el('button', 'small red ghost', 'Remove');
     rm.addEventListener('click', async () => {
-      if (!confirm(`Remove "${p.name}" from BepInEx/plugins?`)) return;
+      if (!await confirmBox(`Remove "${p.name}" from BepInEx/plugins?`)) return;
       try {
         addonState.packs = (await api('DELETE', packUrl)).packs;
         renderAddons();
